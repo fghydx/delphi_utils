@@ -1,0 +1,1249 @@
+/// <remarks>
+/// 增加遍历
+/// </remarks>
+unit GLHashTableEx;
+
+interface
+
+uses SyncObjs,Windows,GLTypeDef,GLBinaryTree,System.Classes;
+
+type
+  PStrHashTableItem = ^TStrHashTableItem;
+  /// <author>Hash数据存放链表</author>
+  TStrHashTableItem = record
+         Key : string;                  //字符串Key值
+        Data : Pointer;                 //数据存放地址
+        DataLen:integer;                //数据长度
+        RefCnt:integer;
+    NextItem : PStrHashTableItem;          //如果Hash值相同，存进链表的下一个地址
+  end;
+
+  /// <author>节点信息，上一节点，当前节点,查找删除的时候用</author>
+  TStrHashItemInfo = record
+    FrontItem:PStrHashTableItem;
+     CurrItem:PStrHashTableItem;
+    HashCode:Cardinal;
+  end;
+
+  /// <remarks>
+  /// 自定义Hash算法
+  /// </remarks>
+  TCustomHashMethod = function(Akey:string;TableSize:Cardinal):Integer of object;
+  TOnFreeRefDataItem = procedure(Key:Pointer;RefData:Pointer) of object;
+  TAddWhenExist = function(Key:Pointer;Data:Pointer;DataLen:integer):Boolean of object;
+Type
+  TGLStrHashTable = class
+  private
+    FDatas:TGLStringRBTree;
+    FCharCase: Boolean;
+    Flocker:TCriticalSection;  //添加删除的时候做同步处理
+    FSize,FContentSize: cardinal;
+    FHashList : array of PStrHashTableItem;
+    FCustomHashMethod: TCustomHashMethod;
+    FHashAlgorithm: THashAlgorithm;
+    FItemCount: cardinal;
+    FNeedSync: Boolean;
+    FNeedTraversal: Boolean;
+    FOnFreeRefDataItem: TOnFreeRefDataItem;
+    FOnAddWhenExist: TAddWhenExist;
+    FTraversalList:TList;
+    function GetTraversalList: TList;
+  protected
+    procedure AddHashItem(HashCode:Cardinal;HashItem:PStrHashTableItem);
+    function GetHashItem(AKey:string):TStrHashItemInfo;
+    procedure DisposeHashItem(AHashItem:PStrHashTableItem);
+    function GetItems(Index: Integer): Pointer;
+  public
+    function GetHashCode(AKey:string):Cardinal;
+    constructor Create(size:Cardinal);virtual;
+    destructor Destroy; override;
+    /// <remarks>
+    /// 添加一个Hash数据，如果DataLen>0,则数据是通过CopyMem的，所以调用完添加后，原始Data要释放掉
+    /// </remarks>
+    function Add(AKey:string;Data:Pointer;DataLen:Cardinal):Boolean;
+    /// <remarks>
+    /// 根据Key找到对应的用户Data数据
+    /// </remarks>
+    function Find(AKey: string; out DataLen: Cardinal; RefInc: Boolean = False):
+        Pointer;
+    /// <remarks>
+    /// 如果添加这个Key的数据时，DataLen为0，则仅仅从Hahsh表中移除，本身的Data资源需要自已释放
+    /// </remarks>
+    function Remove(AKey:string;RefDec:Boolean = False): Boolean;
+
+    procedure DecRefCount(AKey:string);
+
+    procedure Clear;
+
+    procedure Lock;
+    procedure UnLock;
+
+    /// <remarks>
+    /// 是否区分大小写
+    /// </remarks>
+    property CharCase: Boolean read FCharCase write FCharCase default True;
+    /// <remarks>
+    /// 选用哪种Hash算法，如果有自定义Hash算法，优先自定义的
+    /// </remarks>
+    property HashAlgorithm: THashAlgorithm read FHashAlgorithm write FHashAlgorithm;
+    /// <remarks>
+    /// Hash表中当前存在的元素个数
+    /// </remarks>
+    property ItemCount: cardinal read FItemCount;
+    /// <remarks> Hash表内容占用空间大小，指针只算一个Integer长度
+    /// </remarks>
+    property ContentSize: cardinal read FContentSize;
+    property Items[Index: Integer]: Pointer read GetItems;
+    /// <remarks>
+    /// 是否需要同步，如果在使用HashTable的地方做了同步，那么HashTable内部没必要同步，可以设为False
+    /// </remarks>
+    property NeedSync: Boolean read FNeedSync write FNeedSync default True;
+    /// <remarks>
+    /// 是否需要遍历，如果不需要，不会对红黑树操作，提高添加删除效率
+    /// </remarks>
+    property NeedTraversal: Boolean read FNeedTraversal write FNeedTraversal;
+    //用于遍历，用红黑树很慢，待测红黑树
+    property TraversalList:TList read GetTraversalList;
+    /// <remarks>
+    /// 自定义Hash算法
+    /// </remarks>
+    property CustomHashMethod: TCustomHashMethod read FCustomHashMethod write
+        FCustomHashMethod;
+    /// <remarks>
+    /// 释放引用数据，添加时如果是指针，且长度传的0时，在这里面释放
+    /// </remarks>
+    property OnFreeRefDataItem: TOnFreeRefDataItem read FOnFreeRefDataItem write
+        FOnFreeRefDataItem;
+    /// <remarks>
+    /// 当添加时,已经存在这个Key时的处理,返回True就不添加,False继续添加
+    ///  已经改为相同不加了,所以这个地方改为只读不让设置了..
+    /// </remarks>
+    property OnAddWhenExist: TAddWhenExist read FOnAddWhenExist {write FOnAddWhenExist};
+
+    function AddString(Key:string;Value:string): Boolean; overload;
+    function AddString(Key:string;Value:Ansistring): Boolean; overload;
+    function AddInteger(Key:string;Value:integer):boolean;
+    function AddInt64(Key:string;Value:int64):boolean;
+    function Addfloat(Key:string;Value:Extended):boolean;
+    function AddDynArr(Key:string;Value:Pointer;DataLen:Integer): Boolean;
+    function AddPointer(Key:string;Value:Pointer):Boolean;
+    function AddObject(Key:string;Value:TObject):Boolean;
+
+    function GetString(Key:string):string;
+    function GetAnsiString(Key:string):AnsiString;
+    function Getinteger(Key:string):integer;
+    function GetInt64(Key:string):Int64;
+    function Getfloat(Key:string):Extended;
+    function GetDynArr(Key:string; out DynArrAddr: Pointer): Pointer;
+    function GetPointer(Key:String):Pointer;
+    function GetObject(Key:String):TObject;
+
+    procedure BeginTraversal;
+    procedure EndTraversal;
+  end;
+
+Type
+  PIntHashTableItem = ^TIntHashTableItem;
+  /// <author>Hash数据存放链表</author>
+  TIntHashTableItem = record
+         Key : Cardinal;                  //字符串Key值
+        Data : Pointer;                 //数据存放地址
+        DataLen:integer;                //数据长度
+        RefCnt:Integer;                 //计数
+    NextItem : PIntHashTableItem;          //如果Hash值相同，存进链表的下一个地址
+  end;
+
+  /// <author>节点信息，上一节点，当前节点,查找删除的时候用</author>
+  TIntHashItemInfo = record
+    FrontItem:PIntHashTableItem;
+     CurrItem:PIntHashTableItem;
+     HashCode:Cardinal;
+  end;
+  TGLIntHashTable = class
+  private
+    FDatas:TGLCardinalRBTree;
+    FCharCase: Boolean;
+    Flocker:TCriticalSection;  //添加删除的时候做同步处理
+    FSize,FContentSize: cardinal;
+    FHashList : array of PIntHashTableItem;
+    FCustomHashMethod: TCustomHashMethod;
+    FHashAlgorithm: THashAlgorithm;
+    FItemCount: cardinal;
+    FNeedSync: Boolean;
+    FNeedTraversal: Boolean;
+    FOnFreeRefDataItem: TOnFreeRefDataItem;
+    FOnAddWhenExist: TAddWhenExist;
+    FTraversalList:TList;
+    function GetTraversalList: TList;
+  protected
+    procedure AddHashItem(HashCode:Cardinal;HashItem:PIntHashTableItem);
+    function GetHashItem(AKey:Cardinal): TIntHashItemInfo;
+    procedure DisposeHashItem(AHashItem:PIntHashTableItem);
+    function GetItems(Index: Integer): Pointer;
+  public
+    function GetHashCode(AKey:Cardinal): Cardinal;
+    constructor Create(size:Cardinal);virtual;
+    destructor Destroy; override;
+    /// <param name="AKey"> (Cardinal) </param>
+    /// <param name="Data"> (Pointer) </param>
+    /// <param
+    /// name="DataLen">数据长度小于等于0时，直接用Data地址放进Hash表，否则用拷贝</param>
+    /// <remarks> 添加一个Hash数据，如果DataLen>0,
+    /// 则数据是通过CopyMem的，所以调用完添加后，原始Data要释放掉
+    /// </remarks>
+    function Add(AKey:Cardinal;Data:Pointer;DataLen:Cardinal):Boolean;
+    /// <remarks>
+    /// 根据Key找到对应的用户Data数据,RefInc=true时,查找时将计数+1,计数=0时才能释放
+    /// </remarks>
+    function Find(AKey:Cardinal;out DataLen:Cardinal;RefInc:Boolean = False):
+        Pointer;
+    /// <remarks>
+    /// 如果添加这个Key的数据时，DataLen为0，则仅仅从Hahsh表中移除，本身的Data资源需要自已释放,RefDec是否减引用计数
+    /// </remarks>
+    function Remove(AKey:Cardinal;RefDec:Boolean = False): Boolean;
+    /// <remarks>
+    /// 引用计数减1
+    /// </remarks>
+    procedure DecRefCount(AKey:Cardinal);
+
+    procedure Clear;
+
+    procedure Lock;
+    procedure UnLock;
+
+    /// <remarks>
+    /// 是否区分大小写
+    /// </remarks>
+    property CharCase: Boolean read FCharCase write FCharCase default True;
+    /// <remarks>
+    /// 选用哪种Hash算法，如果有自定义Hash算法，优先自定义的
+    /// </remarks>
+    property HashAlgorithm: THashAlgorithm read FHashAlgorithm write FHashAlgorithm;
+    /// <remarks>
+    /// Hash表中当前存在的元素个数
+    /// </remarks>
+    property ItemCount: cardinal read FItemCount;
+    /// <remarks> Hash表内容占用空间大小，指针只算一个Integer长度
+    /// </remarks>
+    property ContentSize: cardinal read FContentSize;
+    property Items[Index: Integer]: Pointer read GetItems;
+    /// <remarks>
+    /// 是否需要同步，如果在使用HashTable的地方做了同步，那么HashTable内部没必要同步，可以设为False
+    /// </remarks>
+    property NeedSync: Boolean read FNeedSync write FNeedSync default true;
+    /// <remarks>
+    /// 是否需要遍历，如果不需要，不会对红黑树操作，提高添加删除效率
+    /// </remarks>
+    property NeedTraversal: Boolean read FNeedTraversal write FNeedTraversal
+        default True;
+    /// <remarks>
+    /// 自定义Hash算法
+    /// </remarks>
+    property CustomHashMethod: TCustomHashMethod read FCustomHashMethod write
+        FCustomHashMethod;
+    /// <remarks>
+    /// 释放引用数据，添加时如果是指针，且长度传的0时，在这里面释放
+    /// </remarks>
+    property OnFreeRefDataItem: TOnFreeRefDataItem read FOnFreeRefDataItem write
+        FOnFreeRefDataItem;
+
+    //用于遍历，用红黑树很慢，待测红黑树
+    property TraversalList:TList read GetTraversalList;
+        
+    /// <remarks>
+    /// 当添加时,已经存在这个Key时的处理,返回True就不添加,False继续添加
+    ///  已经改为相同不加了,所以这个地方改为只读不让设置了..
+    /// </remarks>
+    property OnAddWhenExist: TAddWhenExist read FOnAddWhenExist;// write FOnAddWhenExist;
+
+    function AddString(Key:Cardinal;Value:string):Boolean;overload;
+    function AddString(Key:Cardinal;Value:AnsiString):Boolean;overload;
+    function AddInteger(Key:Cardinal;Value:integer):boolean;
+    function AddInt64(Key:Cardinal;Value:int64):boolean;
+    function Addfloat(Key:Cardinal;Value:Extended):boolean;
+    function AddDynArr(Key:Cardinal;Value:Pointer;DataLen:Integer): Boolean;
+    function AddPointer(Key:Cardinal;Value:Pointer):Boolean;
+    function AddObject(Key:Cardinal;Value:TObject):Boolean;
+
+    function GetString(Key:Cardinal):string;
+    function GetAnsiString(Key:Cardinal):AnsiString;
+    function Getinteger(Key:Cardinal):integer;
+    function GetInt64(Key:Cardinal):Int64;
+    function Getfloat(Key:Cardinal):Extended;
+    function GetDynArr(Key:Cardinal; out DynArrAddr: Pointer): Pointer;
+    function GetPointer(Key:Cardinal):Pointer;
+
+    procedure BeginTraversal;
+    procedure EndTraversal;
+  end;
+
+implementation
+
+uses GLHashAlgorithm,SysUtils,GLLogger,GLPubFunc;
+
+{ TGLStrHashTable }
+
+function TGLStrHashTable.Add(AKey: string; Data: Pointer;DataLen:Cardinal):Boolean;
+var
+  HashCode:Cardinal;
+  HashItem:PStrHashTableItem;
+  ADataLen:Cardinal;
+begin
+  Result := False;
+  if Find(AKey,ADataLen)<>nil then
+  begin
+    Exit;
+  end;
+
+  HashCode := GetHashCode(AKey);
+
+  New(HashItem);
+  FillChar(HashItem^,SizeOf(TStrHashTableItem),0);
+  HashItem.Key := AKey;
+
+  if DataLen<=0 then
+  begin
+    HashItem.Data := Data;
+  end else
+  begin
+    HashItem.Data := GetMemory(DataLen);
+    CopyMemory(HashItem.Data,Data,DataLen);
+  end;
+  HashItem.DataLen := DataLen;
+  HashItem.NextItem := nil;
+  AddHashItem(HashCode,HashItem);
+  Result := True;
+end;
+
+function TGLStrHashTable.AddString(Key:string;Value:Ansistring): Boolean;
+begin
+  Result := Add(Key,@Value[1],Length(Value));
+end;
+
+procedure TGLStrHashTable.BeginTraversal;
+var
+  i,j:NativeInt;
+  temItem:PStrHashTableItem;
+begin
+  Self.Lock;
+  if FTraversalList=nil then
+    FTraversalList := TList.Create;
+  FTraversalList.Clear;
+  for I := 0 to Length(FHashList)-1 do
+  begin
+    j := 0;
+    temItem := FHashList[I];
+    while temItem<>nil do
+    begin
+      FTraversalList.Add(temItem.Data);
+      temItem := temItem.NextItem;
+      Inc(j);
+      if j>1000000 then
+        Exit;
+    end;
+  end;
+end;
+
+function TGLStrHashTable.AddDynArr(Key: string; Value: Pointer;
+  DataLen: Integer): Boolean;
+begin
+  Result := Add(Key,Pointer(Integer(Value)-SizeOf(Pointer)*2),DataLen+SizeOf(Pointer)*2);
+end;
+
+function TGLStrHashTable.Addfloat(Key: string; Value: Extended): boolean;
+begin
+  Result := Add(Key,@Value,SizeOf(Extended));
+end;
+
+procedure TGLStrHashTable.AddHashItem(HashCode:Cardinal;
+    HashItem:PStrHashTableItem);
+
+  function CheckExist(TemHashItem:PStrHashTableItem):Boolean;
+  var
+    Exist:boolean;
+  begin
+    Result := False;
+    if Assigned(OnAddWhenExist) then
+    begin
+      if CharCase then
+        Exist := TemHashItem.Key = HashItem.Key
+      else
+        Exist := LowerCase(TemHashItem.Key) = LowerCase(HashItem.Key);
+      if Exist then
+      begin
+        Result := OnAddWhenExist(PAnsiChar(HashItem.Key),HashItem.Data,HashItem.DataLen);
+      end;
+    end;
+  end;
+
+var
+  TemHashItem:PStrHashTableItem;
+begin
+  if NeedSync then Flocker.Enter;
+  try
+    if FHashList[HashCode]=nil then
+    begin
+      FHashList[HashCode] := HashItem;
+    end else
+    begin
+      TemHashItem := FHashList[HashCode];
+      if CheckExist(TemHashItem) then
+      begin
+        Dispose(HashItem);
+        Exit;
+      end;
+      
+      while TemHashItem.NextItem<>nil do
+      begin
+        TemHashItem := TemHashItem.NextItem;
+        if CheckExist(TemHashItem) then
+        begin
+          Dispose(HashItem);
+          Exit;
+        end;
+      end;
+      TemHashItem.NextItem := HashItem;
+    end;
+    inc(FItemCount);
+    if HashItem.DataLen>0 then
+    begin
+      Inc(FContentSize,Hashitem.DataLen);
+    end else
+    begin
+      Inc(FContentSize,SizeOf(Integer));
+    end;
+    if FNeedTraversal then    
+      FDatas.Add(HashItem.Key,TObject(HashItem))
+  finally
+    if NeedSync then Flocker.Leave;
+  end;
+end;
+
+function TGLStrHashTable.AddInt64(Key: string; Value: int64): boolean;
+begin
+  Result := Add(Key,@Value,SizeOf(int64));
+end;
+
+function TGLStrHashTable.AddInteger(Key: string; Value: integer): boolean;
+begin
+  Result := Add(Key,@Value,SizeOf(Integer));
+end;
+
+function TGLStrHashTable.AddObject(Key: string; Value: TObject): Boolean;
+begin
+  Result := Add(Key,Value,0);
+end;
+
+function TGLStrHashTable.AddPointer(Key: string; Value: Pointer): Boolean;
+begin
+  Result := Add(Key,Value,0);
+end;
+
+function TGLStrHashTable.AddString(Key, Value: string): Boolean;
+begin
+  Result := Add(Key,@Value[1],ByteLength(Value));
+end;
+
+procedure TGLStrHashTable.Clear;
+var
+  I: Integer;
+  HashItem:PStrHashTableItem;
+begin
+  if NeedSync then Flocker.Enter;
+  try
+    for I := 0 to Fsize - 1 do
+    begin
+      if FHashList[I]<>nil then
+      begin
+        HashItem := FHashList[I];
+        DisposeHashItem(HashItem);
+      end;
+      FHashList[I]:= nil;
+    end;
+  finally
+    if NeedSync then Flocker.Leave;
+  end;
+end;
+
+constructor TGLStrHashTable.Create(size: Cardinal);
+begin
+  FHashAlgorithm := HADefault;
+  FCharCase := True;
+  Fsize := size;
+  SetLength(FHashList,Fsize);
+  FillChar(FHashList[0],sizeof(PStrHashTableItem)*Fsize,0);
+  Flocker := TCriticalSection.Create;
+  FDatas := TGLStringRBTree.Create;
+end;
+
+procedure TGLStrHashTable.DecRefCount(AKey: string);
+var
+  HashItem:PStrHashTableItem;
+begin
+  if NeedSync then Flocker.Enter;
+  try
+    HashItem := GetHashItem(AKey).CurrItem;
+    if HashItem<>nil then
+    begin
+        dec(HashItem.RefCnt);
+    end;
+  finally
+    if NeedSync then Flocker.Leave;
+  end;
+end;
+
+destructor TGLStrHashTable.Destroy;
+begin
+  Clear;
+  SetLength(FHashList,0);
+  Flocker.Free;
+  FDatas.Free;
+  if FTraversalList<>nil then
+    FTraversalList.Free;
+  inherited;
+end;
+
+procedure TGLStrHashTable.DisposeHashItem(AHashItem:PStrHashTableItem);
+begin
+  if AHashItem<>nil then
+  begin
+    if AHashItem.NextItem<>nil then
+    begin
+      DisposeHashItem(AHashItem.NextItem);
+    end;
+
+    if AHashItem.DataLen>0 then
+      FreeMemory(AHashItem.Data)
+    else begin
+      if Assigned(FOnFreeRefDataItem) then
+        FOnFreeRefDataItem(PAnsiChar(AHashItem.Key),AHashItem.Data);
+    end;
+    AHashItem.Key := '';
+
+    Dispose(AHashItem);
+  end;
+end;
+
+procedure TGLStrHashTable.EndTraversal;
+begin
+  FTraversalList.Clear;
+  self.UnLock;
+end;
+
+function TGLStrHashTable.Find(AKey: string; out DataLen: Cardinal; RefInc:
+    Boolean = False): Pointer;
+var
+  HashItem:PStrHashTableItem;
+begin
+  DataLen := 0;
+  Result := nil;
+  if NeedSync then Flocker.Enter;
+  try
+    HashItem := GetHashItem(AKey).CurrItem;
+    if HashItem<>nil then
+    begin
+      Result := HashItem.Data;
+      DataLen := HashItem.DataLen;
+      if RefInc then
+      begin
+        inc(HashItem.RefCnt);
+      end;
+    end;
+  finally
+    if NeedSync then Flocker.Leave;
+  end;
+end;
+
+function TGLStrHashTable.GetAnsiString(Key: string): AnsiString;
+var
+  P:Pointer;
+  DataLen:Cardinal;
+begin
+  Result := '';
+  P := Find(Key,DataLen);
+  if P<>nil then
+  begin
+    SetLength(Result,DataLen);
+    CopyMemory(@result[1],P,DataLen);
+  end;
+end;
+
+function TGLStrHashTable.GetDynArr(Key:string; out DynArrAddr: Pointer):
+    Pointer;
+var
+  DataLen:Cardinal;
+begin
+  Result := Find(Key,DataLen);
+  if Result<>nil then
+  begin
+    DynArrAddr := Pointer(integer(Result)+sizeof(Pointer)*2);
+  end;
+end;
+
+function TGLStrHashTable.Getfloat(Key: string): Extended;
+var
+  P:PExtended;
+  DataLen:Cardinal;
+begin
+  Result := 0;
+  P := Find(Key,DataLen);
+  if P<>nil then
+  begin
+    Result := P^;
+  end;
+end;
+
+function TGLStrHashTable.GetHashCode(AKey: string): Cardinal;
+begin
+  Result := 0;
+  if Assigned(CustomHashMethod) then
+    Result := FCustomHashMethod(AKey,Fsize)
+  else
+  begin
+    case FHashAlgorithm of
+      HADefault: Result := DefultHash(MarshaledAString(Akey),ByteLength(Akey),CharCase) mod Fsize;
+           HARS: Result := RSHash(MarshaledAString(Akey),ByteLength(Akey),CharCase) mod Fsize;
+           HAJS: Result := JSHash(MarshaledAString(Akey),ByteLength(Akey),CharCase) mod Fsize;
+          HAPJW: Result := PJWHash(MarshaledAString(Akey),ByteLength(Akey),CharCase) mod Fsize;
+          HAELF: Result := ELFHash(MarshaledAString(Akey),ByteLength(Akey),CharCase) mod Fsize;
+         HABKDR: Result := BKDRHash(MarshaledAString(Akey),ByteLength(Akey),CharCase) mod Fsize;
+         HASDBM: Result := SDBMHash(MarshaledAString(Akey),ByteLength(Akey),CharCase) mod Fsize;
+          HADJB: Result := DJBHash(MarshaledAString(Akey),ByteLength(Akey),CharCase) mod Fsize;
+           HAAP: Result := APHash(MarshaledAString(Akey),ByteLength(Akey),CharCase) mod Fsize;
+    end;
+  end;
+end;
+
+function TGLStrHashTable.GetHashItem(AKey: string): TStrHashItemInfo;
+var
+  HashCode:Cardinal;
+  HashItem:PStrHashTableItem;
+begin
+  Result.FrontItem := nil;
+  Result.CurrItem := nil;
+  
+  HashCode := GetHashCode(AKey);
+  Result.HashCode := HashCode;
+
+  HashItem := FHashList[HashCode];
+  if HashItem<>nil then
+  begin
+    if HashItem.Key=AKey then
+    begin
+      Result.CurrItem := HashItem;
+    end else
+    begin
+      while HashItem.NextItem<>nil do
+      begin
+        if HashItem.NextItem.Key=AKey then
+        begin
+          Result.FrontItem := HashItem;
+          Result.CurrItem := HashItem.NextItem;
+          Break;
+        end;
+        HashItem := HashItem.NextItem;
+      end;
+    end;
+  end;
+end;
+
+function TGLStrHashTable.GetInt64(Key: string): Int64;
+var
+  P:PInt64;
+  DataLen:Cardinal;
+begin
+  Result := 0;
+  P := Find(Key,DataLen);
+  if P<>nil then
+  begin
+    Result := P^;
+  end;
+end;
+
+function TGLStrHashTable.Getinteger(Key: string): integer;
+var
+  P:PInteger;
+  DataLen:Cardinal;
+begin
+  Result := 0;
+  P := Find(Key,DataLen);
+  if P<>nil then
+  begin
+    Result := P^;
+  end;
+end;
+
+function TGLStrHashTable.GetItems(Index: Integer): Pointer;
+begin
+  if FNeedTraversal then
+    Result := PStrHashTableItem(FDatas.List[index]).Data
+  else
+    raise Exception.Create('遍历开关NeedTraversal为False，如果要遍历操作，请将他设置为True！');
+end;
+
+function TGLStrHashTable.GetObject(Key: String): TObject;
+var
+  DataLen:Cardinal;
+begin
+   result := Find(Key,DataLen);
+end;
+
+function TGLStrHashTable.GetPointer(Key: String): Pointer;
+var
+  DataLen:Cardinal;
+begin
+  result := Find(Key,DataLen);
+end;
+
+function TGLStrHashTable.GetString(Key: string): string;
+var
+  P:Pointer;
+  DataLen:Cardinal;
+begin
+  Result := '';
+  P := Find(Key,DataLen);
+  if P<>nil then
+  begin
+    SetLength(Result,DataLen div SizeOf(Char));
+    CopyMemory(@result[1],P,DataLen);
+  end;
+end;
+
+function TGLStrHashTable.GetTraversalList: TList;
+begin
+  if FTraversalList=nil then
+  begin
+    raise Exception.Create('请先调用BeginTraversal，处理完成后调用EndTraversal');
+  end;
+  Result := FTraversalList;
+end;
+
+procedure TGLStrHashTable.Lock;
+begin
+  if NeedSync then
+    Flocker.Enter;
+end;
+
+function TGLStrHashTable.Remove(AKey:string;RefDec:Boolean = False): Boolean;
+var
+  HashItemInfo:TStrHashItemInfo;
+  HashItem:PStrHashTableItem;
+begin
+  try
+    Result := true;
+    if NeedSync then Flocker.Enter;
+    try
+      HashItemInfo := GetHashItem(AKey);
+      if HashItemInfo.CurrItem<>nil then
+      begin
+        HashItem := HashItemInfo.CurrItem;
+
+        if RefDec then
+        begin
+          Dec(HashItem.RefCnt);
+        end;
+        if HashItem.RefCnt>0 then            //如果引用计数大于0,不删除
+        begin
+          Result := False;
+          Exit;
+        end;
+
+        if FNeedTraversal then
+          FDatas.Delete(HashItem.Key);
+        if HashItemInfo.FrontItem<>nil then
+          HashItemInfo.FrontItem.NextItem := HashItem.NextItem
+        else
+          FHashList[HashItemInfo.HashCode] := HashItem.NextItem;
+        if HashItem.DataLen>0 then
+        begin
+          Dec(FContentSize,Hashitem.DataLen);
+          FreeMemory(HashItem.Data);
+        end else
+        begin
+          if Assigned(FOnFreeRefDataItem) then
+            FOnFreeRefDataItem(PAnsiChar(HashItem.Key),HashItem.Data);
+          Dec(FContentSize,sizeof(Integer));
+        end;
+        HashItem.Key := '';
+        Dispose(HashItem);
+        Dec(FItemCount);
+      end else
+      begin
+        Result := False;
+      end;
+    finally
+      if NeedSync then Flocker.Leave;
+    end;
+  except
+    Logger.WriteLog(LTError,'TGLStrHashTable.Remove : '+LastErrMsg);
+  end;
+end;
+
+procedure TGLStrHashTable.UnLock;
+begin
+  if NeedSync then
+    Flocker.Leave;
+end;
+
+///TGLIntHashTable
+function TGLIntHashTable.Add(AKey:Cardinal;Data:Pointer;DataLen:Cardinal):Boolean;
+var
+  HashCode:Cardinal;
+  HashItem:PIntHashTableItem;
+  ADataLen:Cardinal;
+begin
+  Result := False;
+  if Find(Akey,ADataLen)<>nil then
+  begin
+    Exit;
+  end;
+  HashCode := GetHashCode(AKey);
+
+  New(HashItem);
+  FillChar(HashItem^,SizeOf(TIntHashTableItem),0);
+  HashItem.Key := AKey;
+
+  if DataLen<=0 then
+  begin
+    HashItem.Data := Data;
+  end else
+  begin
+    HashItem.Data := GetMemory(DataLen);
+    CopyMemory(HashItem.Data,Data,DataLen);
+  end;
+  HashItem.DataLen := DataLen;
+  HashItem.NextItem := nil;
+  AddHashItem(HashCode,HashItem);
+  Result := True;
+end;
+
+function TGLIntHashTable.AddDynArr(Key: Cardinal; Value: Pointer;
+  DataLen: Integer): Boolean;
+begin
+  Result := Add(Key,Pointer(Integer(Value)-SizeOf(Pointer)*2),DataLen+SizeOf(Pointer)*2);
+end;
+
+function TGLIntHashTable.Addfloat(Key: Cardinal; Value: Extended): boolean;
+begin
+  Result := Add(Key,@Value,SizeOf(Extended));
+end;
+
+procedure TGLIntHashTable.AddHashItem(HashCode:Cardinal;
+    HashItem:PIntHashTableItem);
+
+  function CheckExist(TemHashItem:PIntHashTableItem):Boolean;
+  begin
+    Result := False;
+    if Assigned(OnAddWhenExist) then
+    begin
+      if TemHashItem.Key = HashItem.Key then
+      begin
+        Result := OnAddWhenExist(Pointer(HashItem.Key),HashItem.Data,HashItem.DataLen);
+      end;
+    end;
+  end;
+var
+  TemHashItem:PIntHashTableItem;
+begin
+  if NeedSync then Flocker.Enter;
+  try
+    if FHashList[HashCode]=nil then
+    begin
+      FHashList[HashCode] := HashItem;
+    end else
+    begin
+      TemHashItem := FHashList[HashCode];
+      if CheckExist(TemHashItem) then
+      begin
+        Dispose(HashItem);
+        Exit;
+      end;
+      while TemHashItem.NextItem<>nil do
+      begin
+        TemHashItem := TemHashItem.NextItem;
+        if CheckExist(TemHashItem) then
+        begin
+          Dispose(HashItem);
+          Exit;
+        end;
+      end;
+      TemHashItem.NextItem := HashItem;
+    end;
+    inc(FItemCount);
+    if HashItem.DataLen>0 then
+    begin
+      Inc(FContentSize,Hashitem.DataLen);
+    end else
+    begin
+      Inc(FContentSize,SizeOf(Integer));
+    end;
+    if FNeedTraversal then
+      FDatas.Add(HashItem.Key,TObject(HashItem));
+  finally
+    if NeedSync then Flocker.Leave;
+  end;
+end;
+
+function TGLIntHashTable.AddInt64(Key: Cardinal; Value: int64): boolean;
+begin
+  Result := Add(Key,@Value,SizeOf(int64));
+end;
+
+function TGLIntHashTable.AddInteger(Key: Cardinal; Value: integer): boolean;
+begin
+  Result := Add(Key,@Value,SizeOf(Integer));
+end;
+
+function TGLIntHashTable.AddPointer(Key: Cardinal; Value: Pointer): Boolean;
+begin
+  Result := Add(Key,Value,0);
+end;
+
+function TGLIntHashTable.AddString(Key: Cardinal; Value: AnsiString): Boolean;
+begin
+  Result := Add(Key,@Value[1],Length(Value));
+end;
+
+procedure TGLIntHashTable.BeginTraversal;
+var
+  i,j:NativeInt;
+  temItem:PIntHashTableItem;
+begin
+  Self.Lock;
+  if FTraversalList=nil then
+    FTraversalList := TList.Create;
+  FTraversalList.Clear;
+  for I := 0 to Length(FHashList)-1 do
+  begin
+    j := 0;
+    temItem := FHashList[I];
+    while temItem<>nil do
+    begin
+      FTraversalList.Add(temItem.Data);
+      temItem := temItem.NextItem;
+      Inc(j);
+      if j>1000000 then
+        Exit;
+    end;
+  end;
+end;
+
+function TGLIntHashTable.AddString(Key: Cardinal; Value: string): Boolean;
+begin
+  Result := Add(Key,@Value[1],ByteLength(Value));
+end;
+
+procedure TGLIntHashTable.Clear;
+var
+  I: Integer;
+  HashItem:PIntHashTableItem;
+begin
+  if NeedSync then Flocker.Enter;
+  try
+    for I := 0 to Fsize - 1 do
+    begin
+      if FHashList[I]<>nil then
+      begin
+        HashItem := FHashList[I];
+        DisposeHashItem(HashItem);
+      end;
+      FHashList[I]:= nil;
+    end;
+  finally
+    if NeedSync then Flocker.Leave;
+  end;
+end;
+
+constructor TGLIntHashTable.Create(size: Cardinal);
+begin
+  FHashAlgorithm := HADefault;
+  FNeedSync := True;
+  FCharCase := True;
+  Fsize := size;
+  SetLength(FHashList,Fsize);
+  FillChar(FHashList[0],sizeof(PIntHashTableItem)*Fsize,0);
+  Flocker := TCriticalSection.Create;
+  FDatas := TGLCardinalRBTree.Create;
+end;
+
+procedure TGLIntHashTable.DecRefCount(AKey:Cardinal);
+var
+  HashItem:PIntHashTableItem;
+begin
+  if NeedSync then Flocker.Enter;
+  try
+    HashItem := GetHashItem(AKey).CurrItem;
+    if HashItem<>nil then
+    begin
+        dec(HashItem.RefCnt);
+    end;
+  finally
+    if NeedSync then Flocker.Leave;
+  end;
+end;
+
+destructor TGLIntHashTable.Destroy;
+begin
+  Clear;
+  SetLength(FHashList,0);
+  FDatas.Free;
+  Flocker.Free;
+  if FTraversalList<>nil then
+    FTraversalList.Free;
+  inherited;
+end;
+
+procedure TGLIntHashTable.DisposeHashItem(AHashItem:PIntHashTableItem);
+begin
+  if AHashItem<>nil then
+  begin
+    if AHashItem.NextItem<>nil then
+    begin
+      DisposeHashItem(AHashItem.NextItem);
+    end;
+    if AHashItem.DataLen>0 then
+      FreeMemory(AHashItem.Data)
+    else begin
+      if Assigned(FOnFreeRefDataItem) then
+        FOnFreeRefDataItem(Pointer(AHashItem.Key),AHashItem.Data);
+    end;
+    AHashItem.Key := 0;
+    Dispose(AHashItem);
+  end;
+end;
+
+procedure TGLIntHashTable.EndTraversal;
+begin
+  FTraversalList.Clear;
+  self.UnLock;
+end;
+
+function TGLIntHashTable.Find(AKey:Cardinal;out DataLen:Cardinal;RefInc:Boolean
+    = False): Pointer;
+var
+  HashItem:PIntHashTableItem;
+begin
+  DataLen := 0;
+  Result := nil;
+  if NeedSync then Flocker.Enter;
+  try
+    HashItem := GetHashItem(AKey).CurrItem;
+    if HashItem<>nil then
+    begin
+      Result := HashItem.Data;
+      DataLen := HashItem.DataLen;
+      if RefInc then
+        Inc(HashItem.RefCnt);
+    end;
+  finally
+    if NeedSync then Flocker.Leave;
+  end;
+end;
+
+function TGLIntHashTable.GetAnsiString(Key: Cardinal): AnsiString;
+var
+  P:Pointer;
+  DataLen:Cardinal;
+begin
+  Result := '';
+  P := Find(Key,DataLen);
+  if P<>nil then
+  begin
+    SetLength(Result,DataLen);
+    CopyMemory(@result[1],P,DataLen);
+  end;
+end;
+
+function TGLIntHashTable.GetDynArr(Key:Cardinal; out DynArrAddr: Pointer):
+    Pointer;
+var
+  DataLen:Cardinal;
+begin
+  Result := Find(Key,DataLen);
+  if Result<>nil then
+  begin
+    DynArrAddr := Pointer(integer(Result)+sizeof(Pointer)*2);
+  end;
+end;
+
+function TGLIntHashTable.Getfloat(Key: Cardinal): Extended;
+var
+  P:PExtended;
+  DataLen:Cardinal;
+begin
+  Result := 0;
+  P := Find(Key,DataLen);
+  if P<>nil then
+  begin
+    Result := P^;
+  end;
+end;
+
+function TGLIntHashTable.GetHashCode(AKey:Cardinal): Cardinal;
+begin
+  Result := AKey mod FSize;
+end;
+
+function TGLIntHashTable.GetHashItem(AKey:Cardinal): TIntHashItemInfo;
+var
+  HashCode:Cardinal;
+  HashItem:PIntHashTableItem;
+begin
+  Result.FrontItem := nil;
+  Result.CurrItem := nil;
+  
+  HashCode := GetHashCode(AKey);
+  Result.HashCode := HashCode;
+
+  HashItem := FHashList[HashCode];
+  if HashItem<>nil then
+  begin
+    if HashItem.Key=AKey then
+    begin
+      Result.CurrItem := HashItem;
+    end else
+    begin
+      while HashItem.NextItem<>nil do
+      begin
+        if HashItem.NextItem.Key=AKey then
+        begin
+          Result.FrontItem := HashItem;
+          Result.CurrItem := HashItem.NextItem;
+          Break;
+        end;
+        HashItem := HashItem.NextItem;
+      end;
+    end;
+  end;
+end;
+
+function TGLIntHashTable.GetInt64(Key: Cardinal): Int64;
+var
+  P:PInt64;
+  DataLen:Cardinal;
+begin
+  Result := 0;
+  P := Find(Key,DataLen);
+  if P<>nil then
+  begin
+    Result := P^;
+  end;
+end;
+
+function TGLIntHashTable.Getinteger(Key: Cardinal): integer;
+var
+  P:PInteger;
+  DataLen:Cardinal;
+begin
+  Result := 0;
+  P := Find(Key,DataLen);
+  if P<>nil then
+  begin
+    Result := P^;
+  end;
+end;
+
+function TGLIntHashTable.GetItems(Index: Integer): Pointer;
+begin
+  if FNeedTraversal then
+    Result := PIntHashTableItem(FDatas.List[index]).Data
+  else
+    raise Exception.Create('遍历开关NeedTraversal为False，如果要遍历操作，请将他设置为True！');
+end;
+
+function TGLIntHashTable.GetPointer(Key: Cardinal): Pointer;
+var
+  DataLen:Cardinal;
+begin
+  result := Find(Key,DataLen);
+end;
+
+function TGLIntHashTable.GetString(Key: Cardinal): string;
+var
+  P:Pointer;
+  DataLen:Cardinal;
+begin
+  Result := '';
+  P := Find(Key,DataLen);
+  if P<>nil then
+  begin
+    SetLength(Result,DataLen div SizeOf(Char));
+    CopyMemory(@result[1],P,DataLen);
+  end;
+end;
+
+function TGLIntHashTable.GetTraversalList: TList;
+begin
+  if FTraversalList=nil then
+  begin
+    raise Exception.Create('请先调用BeginTraversal，处理完成后调用EndTraversal');
+  end;
+  Result := FTraversalList;
+end;
+
+procedure TGLIntHashTable.Lock;
+begin
+  if NeedSync then
+    Flocker.Enter;
+end;
+
+function TGLIntHashTable.Remove(AKey:Cardinal;RefDec:Boolean = False): Boolean;
+var
+  HashItemInfo:TIntHashItemInfo;
+  HashItem:PIntHashTableItem;
+begin
+  try
+    Result := true;
+    if NeedSync then Flocker.Enter;
+    try
+      HashItemInfo := GetHashItem(AKey);
+      if HashItemInfo.CurrItem<>nil then
+      begin
+        HashItem := HashItemInfo.CurrItem;
+        if RefDec then
+        begin
+          Dec(HashItem.RefCnt);
+        end;
+        if HashItem.RefCnt>0 then            //如果引用计数大于0,不删除
+        begin
+          Result := False;
+          Exit;
+        end;
+        
+        if FNeedTraversal then
+          FDatas.Delete(HashItem.Key);
+        if HashItemInfo.FrontItem<>nil then
+          HashItemInfo.FrontItem.NextItem := HashItem.NextItem
+        else
+          FHashList[HashItemInfo.HashCode] := HashItem.NextItem;
+        if HashItem.DataLen>0 then
+        begin
+          Dec(FContentSize,Hashitem.DataLen);
+          FreeMemory(HashItem.Data);
+        end else
+        begin
+          if Assigned(FOnFreeRefDataItem) then
+            FOnFreeRefDataItem(PAnsiChar(HashItem.Key),HashItem.Data);
+          Dec(FContentSize,sizeof(Integer));
+        end;
+        HashItem.Key := 0;
+        Dispose(HashItem);
+        Dec(FItemCount);
+      end else
+      begin
+        result := False;
+      end;
+    finally
+      if NeedSync then Flocker.Leave;
+    end;
+  except
+    Logger.WriteLog(LTError,'TGLIntHashTable.Remove : '+LastErrMsg);
+  end;
+end;
+
+procedure TGLIntHashTable.UnLock;
+begin
+  if NeedSync then
+    Flocker.Leave;
+end;
+end.

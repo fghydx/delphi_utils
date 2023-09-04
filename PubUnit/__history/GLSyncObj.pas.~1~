@@ -1,0 +1,168 @@
+unit GLSyncObj;
+
+interface
+uses Windows,SyncObjs,System.SysUtils;
+
+Type
+  /// <remarks>
+  /// 临界函数，加入TryEnter，如果用TryEnter，TryEnter成功后才能调用Leave；
+  /// </remarks>
+  TGLCriticalSection = class
+  protected
+    FSection: TRTLCriticalSection;
+  public
+    constructor Create;
+    destructor Destroy; override;
+
+    procedure Enter;
+    procedure Leave;
+    function TryEnter: Boolean;
+  end;
+
+  TGLSemaphore = class
+  private
+    FSemaphore:THandle;
+  public
+    constructor Create(SignCount: Integer = 0);
+    destructor Destroy; override;
+
+    procedure SetEvent(EventCount: integer = 1);
+    procedure WaitForSign(Timeout:Cardinal = INFINITE);
+  end;
+
+  TThreadSafeString = class
+  private
+    FData:string;
+    FCs:TGLCriticalSection;
+
+    function GetString:String;
+    procedure SetString(Value:String);
+  public
+    constructor create;
+    destructor Destroy; override;
+
+    procedure AddString(AStr:String);
+
+    property Data:String read GetString write SetString;
+  end;
+
+  TGLMutex = class(TMutex)
+  private
+    FEXISTS:Boolean;
+  public
+    constructor Create(MutexAttributes: PSecurityAttributes; InitialOwner: Boolean; const Name: string; UseCOMWait: Boolean = False);
+    property Exists:Boolean read FEXISTS;
+  end;
+
+  TReadWriteLocker = TMREWSync;      //读写锁，可多个同时读，单个写
+
+implementation
+
+{ TGLCriticalSection }
+
+constructor TGLCriticalSection.Create;
+begin
+  InitializeCriticalSection(FSection);
+end;
+
+destructor TGLCriticalSection.Destroy;
+begin
+  DeleteCriticalSection(FSection);
+  inherited;
+end;
+
+procedure TGLCriticalSection.Enter;
+begin
+  EnterCriticalSection(FSection);
+end;
+
+procedure TGLCriticalSection.Leave;
+begin
+  LeaveCriticalSection(FSection);
+end;
+
+function TGLCriticalSection.TryEnter: Boolean;
+begin
+  Result := TryEnterCriticalSection(FSection);
+end;
+
+{ TSemaphore }
+
+constructor TGLSemaphore.Create(SignCount: Integer = 0);
+begin
+  FSemaphore:=CreateSemaphore(nil,0,MAXLONG,nil);
+end;
+
+destructor TGLSemaphore.Destroy;
+begin
+  CloseHandle(FSemaphore);
+  inherited;
+end;
+
+procedure TGLSemaphore.SetEvent(EventCount: integer = 1);
+begin
+  ReleaseSemaphore(FSemaphore,EventCount,nil);
+end;
+
+procedure TGLSemaphore.WaitForSign(Timeout:Cardinal = INFINITE);
+begin
+  WaitForSingleObject(FSemaphore,Timeout);
+end;
+
+{ TThreadSafeString }
+
+procedure TThreadSafeString.AddString(AStr: String);
+begin
+  FCs.Enter;
+  try
+    FData := FData+Astr;
+  finally
+    FCs.Leave;
+  end;
+end;
+
+constructor TThreadSafeString.create;
+begin
+  FCs := TGLCriticalSection.Create;  
+end;
+
+destructor TThreadSafeString.Destroy;
+begin
+  FCs.Free;
+  inherited;
+end;
+
+function TThreadSafeString.GetString: String;
+begin
+  FCs.Enter;
+  try
+    Result := FData;
+  finally
+    FCs.Leave;
+  end;
+end;
+
+procedure TThreadSafeString.SetString(Value: String);
+begin
+  FCs.Enter;
+  try
+    FData := Value;
+  finally
+    FCs.Leave;
+  end;
+end;
+
+{ TGLMutex }
+
+constructor TGLMutex.Create(MutexAttributes: PSecurityAttributes;
+  InitialOwner: Boolean; const Name: string; UseCOMWait: Boolean);
+begin
+  FEXISTS := false;
+  inherited Create(MutexAttributes,InitialOwner,Name,UseCOMWait);
+  if (FHandle>0) and (GetLastError = ERROR_ALREADY_EXISTS) then
+  begin
+    FEXISTS := True;
+  end;
+end;
+
+end.

@@ -1,0 +1,305 @@
+unit GLQueue;
+
+
+interface
+
+
+uses SysUtils,System.SyncObjs;
+
+type
+  /// <remarks>
+  /// 支持弹出阻塞的多线程安全队列，从CnVCL中改过来的
+  /// </remarks>
+  TGLQueue = class(TObject)
+  private
+    FCanPush:Boolean;
+    FCanPop:Boolean;           //是否可以弹出元素,如果不可以,就弹出个nil
+    FCheckCanPop : Boolean;
+    FHead: TObject;
+    FTail: TObject;
+    FSize: Integer;
+    FLock: TCriticalSection;
+    FSemaphore: TSemaphore;
+    FBlocked: Boolean;
+    FEnableCriticalSection: Boolean;
+    procedure FreeNode(Value: TObject);
+    function GetSize: Integer;
+    procedure SetBlocked(const Value: Boolean);
+    procedure SetEnableCriticalSection(const Value: Boolean);
+  public
+    procedure SetEvent;
+    procedure Init;        //IOCP用到FCanPush,FCanPop,FCheckCanPop时要用,其它地方不考虑
+    constructor Create(PopBlock: Boolean = True);
+    destructor Destroy; override;
+    Function Push(Data: Pointer;Tag: Integer=0):Boolean;
+    function Pop(ACanPush:Boolean = True): Pointer;
+    function CheckPop(Out P:Pointer;ASetCanPop:Boolean):Boolean;            //这个函数用于IOCP中的弹出,其它地方看个人是否有这种需要
+    function Find(Data:Pointer):Boolean;
+    property Size: Integer read GetSize;
+    property Blocked: Boolean read FBlocked write SetBlocked default True;
+    //1 是否启用临界区
+    property EnableCriticalSection: Boolean read FEnableCriticalSection write
+        SetEnableCriticalSection default True;
+    property CheckCanPop:Boolean Read FCheckCanPop Write FCheckCanPop;
+  end;
+
+implementation
+
+type
+  TCnNode = class(TObject)
+  private
+    FNext: TCnNode;
+    FData: Pointer;
+    FTag:Integer;
+  public
+    property Next: TCnNode read FNext write FNext;
+    property Data: Pointer read FData write FData;
+  end;
+
+{ TGLQueue }
+
+function TGLQueue.Find(Data: Pointer): Boolean;
+var
+  Tmp,Prv: TCnNode;
+  I:integer;
+begin
+  if FBlocked then
+    FSemaphore.WaitFor(300);
+  if FEnableCriticalSection then
+     FLock.Enter;
+  try
+    I:=0;
+    Result := False;
+    if FHead = nil then
+      Exit;
+
+    Tmp:=TCnNode(FHead);
+    Prv:=TCnNode(FHead);
+    while Tmp<>nil do
+    begin
+      if Tmp.Data<>Data then
+      begin
+        Prv:=Tmp;
+        Tmp:=Tmp.Next;
+        inc(i);
+        Continue;
+      end;
+      if i<1 then
+        TCnNode(FHead) := Tmp.Next
+      else
+        Prv.Next := Tmp.Next;
+      Tmp.Free;
+      Tmp:=nil;
+      result := True;
+      inc(i);
+    end;
+
+    if TCnNode(FHead) = nil then
+    begin
+      FTail := nil;
+    end;
+    FSize := FSize - 1;
+  finally
+    if FEnableCriticalSection then
+      FLock.Leave;
+  end;
+end;
+
+procedure TGLQueue.FreeNode(Value: TObject);
+var
+  Tmp: TCnNode;
+begin
+  Tmp := TCnNode(Value).Next;
+  TCnNode(Value).Free;
+  if Tmp = nil then
+    Exit;
+  FreeNode(Tmp);
+end;
+
+function TGLQueue.CheckPop(Out P: Pointer;ASetCanPop:Boolean): Boolean;
+var
+  Tmp: TCnNode;
+begin
+  if FBlocked then
+    FSemaphore.WaitFor;
+  if FEnableCriticalSection then
+    FLock.Enter;
+  try
+    Result := False;
+
+    if FCheckCanPop and ASetCanPop and not FCanPop then
+      FCanPop := True;
+
+    if FCheckCanPop and not FCanPop then Exit;
+
+
+    if FHead = nil then
+      Exit;
+    P := TCnNode(FHead).Data;
+    Tmp := TCnNode(FHead).Next;
+    TCnNode(FHead).Free;
+    FHead := Tmp;
+
+    if Tmp = nil then
+      FTail := nil;
+    FSize := FSize - 1;
+
+    if FCheckCanPop then FCanPop := False;
+    Result := True;
+  finally
+    if FEnableCriticalSection then
+      FLock.Leave;
+  end;
+end;
+
+constructor TGLQueue.Create(PopBlock: Boolean = True);
+begin
+  FHead := nil;
+  FTail := nil;
+  FSize := 0;
+  FBlocked:=False;
+  Blocked := PopBlock;
+  FCheckCanPop := False;
+  FCanPop := True;
+  FCanPush := true;
+
+  FEnableCriticalSection:=True;
+  FLock := TCriticalSection.Create;
+end;
+
+destructor TGLQueue.Destroy;
+begin
+  if FHead <> nil then
+    FreeNode(FHead);
+
+  if FBlocked then
+    FSemaphore.Free;
+  if FEnableCriticalSection then
+    FLock.Free;
+  inherited;
+end;
+
+function TGLQueue.Pop(ACanPush:Boolean = True): Pointer;
+var
+  Tmp: TCnNode;
+begin
+  if FBlocked then
+    FSemaphore.WaitFor;
+  if FEnableCriticalSection then
+    FLock.Enter;
+  try
+    FCanPush := ACanPush;
+    Result := nil;
+    if FHead = nil then
+      Exit;
+    Result := TCnNode(FHead).Data;
+    Tmp := TCnNode(FHead).Next;
+    TCnNode(FHead).Free;
+    FHead := Tmp;
+
+    if Tmp = nil then
+      FTail := nil;
+    FSize := FSize - 1;
+  finally
+    if FEnableCriticalSection then
+      FLock.Leave;
+  end;
+end;
+
+function TGLQueue.Push(Data: PointerTag: Integer=0):Boolean;
+var
+  Tmp: TCnNode;
+begin
+  Result := False;
+  if FEnableCriticalSection then
+    FLock.Enter;
+  try
+    if Data = nil then Exit;
+
+    if not FCanPush then
+      Exit;
+
+    Tmp := TCnNode.Create;
+    Tmp.Data := Data;
+    Tmp.Next := nil;
+    
+    if FTail = nil then
+    begin
+      FTail := Tmp;
+      FHead := Tmp;
+    end
+    else
+    begin
+      TCnNode(FTail).Next := Tmp;
+      FTail := Tmp
+    end;
+    FSize := FSize + 1;
+    if FBlocked then
+      SetEvent;
+  finally
+    if FEnableCriticalSection then
+      FLock.Leave;
+  end;
+  Result := true;
+end;
+
+
+procedure TGLQueue.SetEvent;
+begin
+  if FBlocked then
+    FSemaphore.Release(1);
+end;
+
+function TGLQueue.GetSize: Integer;
+begin
+  Result := FSize;
+end;
+
+procedure TGLQueue.Init;
+begin
+  if FEnableCriticalSection then
+    FLock.Enter;
+  try
+    FCanPop := True;
+    FCanPush := true;
+  finally
+    if FEnableCriticalSection then
+      FLock.Leave;
+  end;
+end;
+
+procedure TGLQueue.SetBlocked(const Value: Boolean);
+var
+  temBlocked:Boolean;
+begin
+  temBlocked := FBlocked;
+
+  FBlocked := Value;
+  if Value then
+  begin
+    if temBlocked <> Value then
+      FSemaphore:= TSemaphore.Create(nil,0,MaxLongInt,'');
+  end else
+  begin
+    if FSemaphore<>nil then
+      FSemaphore.Release(1);
+    if temBlocked <> Value then
+      FSemaphore.Free;
+  end;
+end;
+
+procedure TGLQueue.SetEnableCriticalSection(const Value: Boolean);
+begin
+  if Value then
+  begin
+    if FEnableCriticalSection <> Value then
+      FLock := TCriticalSection.Create;
+  end else
+  begin
+    if FEnableCriticalSection <> Value then
+      FLock.Free;
+  end;
+  FEnableCriticalSection := Value;
+end;
+
+end.

@@ -1,0 +1,260 @@
+unit GLRBTreeEx;
+
+interface
+
+  uses RBTreeBase;
+
+type
+  TQRBStrTree = class(TQRBTree)
+  type
+    strRBTreeData = record
+      AKey:String;
+      AData:Pointer;
+    end;
+    PstrRBTreeData = ^strRBTreeData;
+  private
+    FTmpNode:TQRBNode;
+  protected
+    function StringComp(P1, P2: Pointer): Integer;
+  public
+    function Add(AKey:String;AData: Pointer): Boolean;
+    function findData(AKey:String):Pointer;
+    function DelData(AKey:string):Pointer;
+
+    function First:Pointer;
+    function Next:Pointer;
+
+    constructor Create();
+  end;
+
+  TQRBIntTree = class(TQRBTree)
+  type
+    IntRBTreeData = record
+      AKey:Integer;
+      AData:Pointer;
+    end;
+    PIntRBTreeData = ^IntRBTreeData;
+  private
+    FTmpNode:TQRBNode;
+  protected
+    function IntComp(P1, P2: Pointer): Integer;
+  public
+    function Add(AKey:Integer;AData: Pointer): Boolean;
+    function findData(AKey:Integer):Pointer;
+    function DelData(AKey:Integer):Pointer;
+
+    function First:Pointer;
+    function Next:Pointer;
+
+    constructor Create();
+  end;
+
+  TQRBStrTree = class(TQRBTree)
+  type
+    IntRBTreeData = record
+      AKey:Integer;
+      AData:Pointer;
+    end;
+    PIntRBTreeData = ^IntRBTreeData;
+  private
+    FTmpNode:TQRBNode;
+  protected
+    function IntComp(P1, P2: Pointer): Integer;
+  public
+    function Add(AKey:Integer;AData: Pointer): Boolean;
+    function findData(AKey:Integer):Pointer;
+    function DelData(AKey:Integer):Pointer;
+
+    function First:Pointer;
+    function Next:Pointer;
+
+    constructor Create();
+  end;
+
+implementation
+
+uses sysutils;
+
+{ TQRBStrTree }
+
+function TQRBStrTree.Add(AKey: String; AData: Pointer): Boolean;
+var
+  RBTreeData:PstrRBTreeData;
+begin
+  New(RBTreeData);
+  RBTreeData.AKey := AKey;
+  RBTreeData.AData := AData;
+  Result := Insert(RBTreeData);
+  if not Result then
+    Dispose(RBTreeData);
+end;
+
+constructor TQRBStrTree.Create;
+begin
+  inherited Create();
+  OnCompare := Self.StringComp;
+end;
+
+function TQRBStrTree.DelData(AKey: string): Pointer;
+var
+  RBTreeData:PstrRBTreeData;
+  Node:TQRBNode;
+begin
+  Result := nil;
+  New(RBTreeData);
+  try
+    RBTreeData.AKey := AKey;
+    Node := Find(RBTreeData);
+    if Node<>nil then
+    begin
+      Result := PstrRBTreeData(Node.Data).AData;
+      Delete(Node);
+    end;
+  finally
+    Dispose(RBTreeData);
+  end;
+end;
+
+function TQRBStrTree.findData(AKey: String): Pointer;
+var
+  RBTreeData:PstrRBTreeData;
+  Node:TQRBNode;
+begin
+  Result := nil;
+  New(RBTreeData);
+  try
+    RBTreeData.AKey := AKey;
+    Node := Find(RBTreeData);
+    if Node<>nil then
+    begin
+      Result := PstrRBTreeData(Node.Data).AData;
+    end;
+  finally
+    Dispose(RBTreeData);
+  end;
+end;
+
+function TQRBStrTree.First: Pointer;
+var
+  Node:TQRBNode;
+begin
+  Result := nil;
+  FTmpNode := inherited First;
+  if FTmpNode<>nil then
+  begin
+    Result := PstrRBTreeData(FTmpNode.Data).AData;
+  end;
+end;
+
+function TQRBStrTree.Next: Pointer;
+begin
+  Result := nil;
+  if FTmpNode<>nil then
+    FTmpNode := FTmpNode.Next;
+  if FTmpNode<>nil then
+  begin
+    Result := PstrRBTreeData(FTmpNode.Data).AData;
+  end;
+end;
+
+function TQRBStrTree.StringComp(P1, P2: Pointer): Integer;
+var
+  Data1,Data2:PstrRBTreeData;
+begin
+  Data1 := P1;
+  Data2 := P2;
+  Result := CompareStr(Data1.AKey,Data2.AKey);
+end;
+
+{ TQRBIntTree }
+
+function TQRBIntTree.Add(AKey: Integer; AData: Pointer): Boolean;
+var
+  RBTreeData:PIntRBTreeData;
+begin
+  New(RBTreeData);
+  RBTreeData.AKey := AKey;
+  RBTreeData.AData := AData;
+  Result := Insert(RBTreeData);
+  if not Result then
+    Dispose(RBTreeData);
+end;
+
+constructor TQRBIntTree.Create;
+begin
+  inherited Create();
+  OnCompare := Self.IntComp;
+end;
+
+function TQRBIntTree.DelData(AKey: Integer): Pointer;
+var
+  RBTreeData:PIntRBTreeData;
+  Node:TQRBNode;
+begin
+  Result := nil;
+  New(RBTreeData);
+  try
+    RBTreeData.AKey := AKey;
+    Node := Find(RBTreeData);
+    if Node<>nil then
+    begin
+      Result := PIntRBTreeData(Node.Data).AData;
+      Delete(Node);
+    end;
+  finally
+    Dispose(RBTreeData);
+  end;
+end;
+
+function TQRBIntTree.findData(AKey: Integer): Pointer;
+var
+  RBTreeData:PIntRBTreeData;
+  Node:TQRBNode;
+begin
+  Result := nil;
+  New(RBTreeData);
+  try
+    RBTreeData.AKey := AKey;
+    Node := Find(RBTreeData);
+    if Node<>nil then
+    begin
+      Result := PIntRBTreeData(Node.Data).AData;
+    end;
+  finally
+    Dispose(RBTreeData);
+  end;
+end;
+
+function TQRBIntTree.First: Pointer;
+var
+  Node:TQRBNode;
+begin
+  Result := nil;
+  FTmpNode := inherited First;
+  if FTmpNode<>nil then
+  begin
+    Result := PIntRBTreeData(FTmpNode.Data).AData;
+  end;
+end;
+
+function TQRBIntTree.Next: Pointer;
+begin
+  Result := nil;
+  if FTmpNode<>nil then
+    FTmpNode := FTmpNode.Next;
+  if FTmpNode<>nil then
+  begin
+    Result := PIntRBTreeData(FTmpNode.Data).AData;
+  end;
+end;
+
+function TQRBIntTree.IntComp(P1, P2: Pointer): Integer;
+var
+  Data1,Data2:PIntRBTreeData;
+begin
+  Data1 := P1;
+  Data2 := P2;
+  Result := Data1.AKey - Data2.AKey;
+end;
+
+end.

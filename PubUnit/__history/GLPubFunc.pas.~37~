@@ -1,0 +1,1594 @@
+unit GLPubFunc;
+
+interface
+
+uses
+  Windows, SysUtils, DateUtils, GLTypeDef, ShlObj, StrUtils, Classes, vcl.Forms;
+
+type
+  threadsArr = array[0..1023] of Cardinal;
+  //特殊目录
+  PathType = (DeskTop, DeskTopDirectory, Fonts, NetHood, Personal, Programs, Recent, SendTo, StartMenu, StartUp, Favorites);
+
+
+/// <remarks>
+/// 获取CPU个数
+/// </remarks>
+function GetNumberOfProcessor: Integer;
+
+/// <remarks>
+/// 获取进程句柄数
+/// </remarks>
+function GetHandleCount: Integer;
+
+
+/// <remarks>
+/// 指定线程在指定CPU上执行
+/// </remarks>
+procedure SetThreadOnCPU(ThreadHandle: THandle; CPU: Cardinal);
+
+/// <remarks>
+/// 获取分页内存大小
+/// </remarks>
+function GetSystemPageSize: Integer;
+
+/// <remarks>
+/// 大端字节序转为系统字节序
+/// </remarks>
+function BigEndianToSys(V: Cardinal): Cardinal;
+
+/// <remarks>
+/// 系统字节序转为大端字节序
+/// </remarks>
+function SysToBigEndian(V: Cardinal): Cardinal;
+
+/// <remarks>
+/// 小端字节序转为系统字节序
+/// </remarks>
+function LittleEndianToSys(V: Cardinal): Cardinal;
+
+/// <remarks>
+/// 系统字节序转为小端字节序
+/// </remarks>
+function SysToLittleEndian(V: Cardinal): Cardinal;
+
+/// <remarks>
+/// 比较两个日期的时，天，周，年是否相同
+/// </remarks>
+function SameHour(Former, later: TDateTime): Boolean;
+
+function SameDay(Former, later: TDateTime): Boolean;
+
+function SameMonth(Former, later: TDateTime): Boolean;
+
+function SameYear(Former, Later: TDateTime): Boolean;
+
+/// <remarks>
+/// 获取一段内存数据
+/// </remarks>
+function MemHex(const Buffer; Size: LongWord): AnsiString;
+
+/// <remarks>
+/// 将一串内存数据转换成16进制数据
+/// </remarks>
+function DataToHex(Data: PChar; Len: integer): string; overload;
+function DataToHex(Data: PAnsiChar; Len: integer): AnsiString; overload;
+/// <remarks>
+/// 将一个16进制字符串转换成二进制内容
+/// </remarks>
+
+function HexToData(str: string): PChar;
+
+/// <remarks>
+/// 获取当前程序路径
+/// </remarks>
+function GetCurrentPath: string;
+
+/// <remarks>
+/// 获取数据文件夹路径
+/// </remarks>
+function GetAppDataPath: string;
+
+/// <remarks>
+/// 获取临时文件夹路径
+/// </remarks>
+function GetTempPath: string;
+
+/// <remarks>
+/// 获取系统日期分隔符
+/// </remarks>
+function GetSysDateSplit: Char;
+
+/// <remarks>
+/// 更据程序路径名获取PID
+/// </remarks>
+function GetPIDByProgramName(const APName: string): THandle;
+
+/// <remarks>
+/// 获取进程占用的内存大小
+/// </remarks>
+function GetProcessMemorySize(PID: THandle): Cardinal;
+
+/// <remarks>
+/// 获取当程的线程数量
+/// </remarks>
+function GetThreadCount(PID: THandle): Integer;
+
+/// <remarks>
+/// 获取指定进程的所有线程ID，返回的ID放进ThreadIds里，result为线程数
+/// </remarks>
+function GetThreadIds(PID: THandle; out ThreadIds: threadsArr): integer;
+
+/// <remarks>
+/// 根据文件名结束进程   不区分路径
+/// </remarks>
+procedure KillProcessByFileName(const FileName: string);
+
+/// <remarks>
+/// 打开一个文件
+/// </remarks>
+procedure ShellOpen(const DocName: string);
+
+/// <remarks>
+/// 在默认浏览器中打开一个网址
+/// </remarks>
+procedure OpenUrl(const Url: string);
+
+/// <remarks>
+/// 获取系统盘符
+/// </remarks>
+function GetWindowsDriver: string;
+
+/// <remarks>
+/// URL地址编码
+/// </remarks>
+function UrlEncode(AUrl: string): string;
+
+/// <remarks>
+/// 获取本机IP地址，可能有多个，以，号隔开
+/// </remarks>
+function GetLocalIP: string;
+
+/// <remarks>
+/// 生成一个GUID码
+/// </remarks>
+function CreateGuidString: string;
+
+/// <remarks>
+/// 短路径转长路径
+/// </remarks>
+function ShortNameToLongName(const FileName: AnsiString): AnsiString;
+
+/// <remarks>
+/// 长路径转短路径
+/// </remarks>
+function LongNameToShortName(const FileName: string): string;
+
+/// <remarks> 把程序订到Windows7的任务栏
+/// </remarks>
+/// <param name="Path"> 路径 </param>
+/// <param name="App">文件名</param>
+procedure PinAppToWin7Taskbar(Path, App: string);
+
+/// <remarks>
+/// 返回功能键按键状态,不支持双击按键 ssDouble
+/// </remarks>
+function GetShiftState: TShiftState;
+
+/// <remarks> 窗体是否在最上方显示
+/// <param name="Handle">窗体句柄</param>
+/// <param name="OnTop"> 是否最上方显示</param>
+/// </remarks>
+procedure StayOnTop(Handle: HWND; OnTop: Boolean);
+
+/// <remarks>
+/// 设置程序是否出现在任务栏
+/// </remarks>
+procedure SetHidden(Hide: Boolean);
+
+/// <remarks>
+/// 任务栏是否可见
+/// </remarks>
+procedure SetTaskBarVisible(Visible: Boolean);
+
+/// <remarks>
+/// 设置桌面是否可见
+/// </remarks>
+procedure SetDesktopVisible(Visible: Boolean);
+
+
+/// <remarks>
+/// 强制窗体显示在前面
+/// </remarks>
+function ForceForegroundWindow(HWND: HWND): Boolean;
+
+/// <remarks>
+/// 取桌面区域
+/// </remarks>
+function GetWorkRect(const Form: TCustomForm = nil): TRect;
+
+
+/// <remarks>
+/// 取汉字拼音
+/// </remarks>
+function GetHzPy(const AHzStr: AnsiString): AnsiString;
+
+
+/// <remarks>
+/// 全角转半角 其中句号"。"转为"."，顿号"、"转为","
+/// </remarks>
+function TextFullWidthToHalfWidth(const Text: string): string;
+
+/// <remarks>
+/// 半角转全角
+/// </remarks>
+function TextHalfWidthToFullWidth(const Text: string): string;
+
+/// <remarks>
+/// 提升自身权限到SeDebug或取消此权限
+/// </remarks>
+function AdjustDebugPrivilege(Enable: Boolean): Boolean;
+
+/// <remarks>
+/// 获取Windows系统版本，返回版本字符串
+/// </remarks>
+function GetWindowsVersion: string;
+
+/// <remarks>procedure 检查字符串是否由数字或字母组成</remarks>
+/// <returns> Boolean  满足条件返回True</returns>
+/// <param name="str"> 检查的字符串 </param>
+/// <param name="Tag"> 检查类型(1:数字，2:字母，3:数字和字母) </param>
+/// <param name="NotCheck"> 排除字符，如电话号码中可能有"-",默认为空 </param>
+function CheckNumOrABCStr(str: string; Tag: Integer; NotCheck: string = ''): Boolean;
+
+/// <summary>
+/// IP地址转换成长整型
+/// </summary>
+function IP2Int(IP: string): Cardinal;
+/// <summary>
+/// 长整型转换成IP字符串
+/// </summary>
+
+function Int2IP(IntIP: Cardinal): string;
+
+/// <remarks>
+/// 获取两个GetTickCount得到的值的差值，因为是32位，这个值在运行40多天后会越界，所以加上这个函数
+/// </remarks>
+function GetTickCountDiff(const AOldTickCount, ANewTickCount: Cardinal): Cardinal;
+
+/// <remarks>
+/// 单位转换,把字节换成 kb,mb,gb,tb
+/// </remarks>
+function SizeConvert(ASize: UInt64): string;
+
+/// <remarks>
+///  把秒转换成  天-时-分-秒
+/// </remarks>
+function SecondConvert(Second:UInt64):String;
+
+function LastErrMsg: string;
+
+type
+  TExeType = (EtConsole, EtUnknown, EtFile, EtPipe);
+
+/// <remarks>
+/// 获取当前应用程序类型
+/// </remarks>
+function GetCurrentExeType: TExeType;
+
+/// <summary>procedure DeleteArrItem
+/// </summary>
+/// <param name="PArray">动态数组地址 </param>
+/// <param name="DelIndex"> 删除元素,从0开始计算 </param>
+/// <param name="ItemSize"> 元素大小 </param>
+///  <param name="DelCount"> 要删除多少个数据 </param>
+/// <param name="Count"> 当前个数 </param>
+/// <remarks> 删除动态数组中的一个元素
+/// </remarks>
+function DeleteArrItem(PArray: Pointer; DelIndex: NativeInt; ItemSize: NativeInt; Count: NativeInt; DelCount: NativeInt = 1): Boolean;
+
+
+/// <summary>查找文件夹下的文件
+/// </summary>
+/// <param name="Dir">目录,以\结束</param>
+/// <param name="Ext">后缀名</param>
+/// <param name="Files"> 找到的文件路径 </param>
+procedure SearchFileEx(const path, Ext: string; Files: TStrings);
+
+function RightstrEx(str: string; Count: integer): string;
+
+function LeftstrEx(str: string; Count: integer): string;
+///删除指定符串,指定字符出现的第index次之后的串
+
+function DelRight(str: string; start: string; Index: Integer): string;
+
+///获取磁盘文件类型，"NTFS"等，如果这个盘符是空的（如光驱没插光盘），返回空
+function GetDriveFileSystem(DirveName: string): string;
+
+function GetDriveSpace(DriveName: string; out FreeSpace: Int64; out ToatleSpace: int64): Boolean;
+
+///域名转IP
+function HostToIP(Host: AnsiString; var IP: AnsiString): Boolean;
+
+///<Remarks>
+///将一个Unicode字符串转换成中文GBK字符
+///示例  Unicode2Ansic('\u6210\u529f')       返回“成功”
+///</Remarks>
+function Unicode2Ansic(Str: AnsiString): string;
+
+
+/// <Remarks>
+///  获取操作系统中的特殊目录
+/// </Remarks>
+/// <returns> 路径
+/// </returns>
+/// <param name="AWonerHandle"> (THandle) </param>
+/// <param name="APathType"> (PathType) </param>
+function GetSpecialFolder(AWonerHandle: THandle; APathType: PathType): string;
+
+var
+  liOldIdleTime, liOldSystemTime: LARGE_INTEGER;
+
+implementation
+
+uses
+  TlHelp32, PsAPI, ShellAPI, HTTPApp, GLWinsockX, ActiveX, ComObj, MultiMon,
+  Variants, GLStreamPatch;
+
+var
+  ByteOrder: TByteOrder;
+  _Kernel32Handle: HMODULE = HMODULE(0);
+  _GetLongPathName: function(lpszShortPath: PChar; lpszLongPath: PChar; cchBuffer: DWORD): DWORD; stdcall;
+
+function GetProcessHandleCount(ProcessID: THandle; var HandleCount: Cardinal): Integer; stdcall; external kernel32 name 'GetProcessHandleCount';
+
+function GetTickCountDiff(const AOldTickCount, ANewTickCount: Cardinal): Cardinal;
+begin
+  if ANewTickCount >= AOldTickCount then
+  begin
+    Result := ANewTickCount - AOldTickCount;
+  end
+  else
+  begin
+    Result := High(Cardinal) - AOldTickCount + ANewTickCount;
+  end;
+end;
+
+function Kernel32Handle: HMODULE;
+begin
+  if _Kernel32Handle = HMODULE(0) then
+    _Kernel32Handle := LoadLibrary(kernel32);
+  Result := _Kernel32Handle;
+end;
+
+procedure StrResetLength(var S: AnsiString);
+begin
+  SetLength(S, StrLen(PAnsiChar(S)));
+end;
+
+function ShellGetLongPathName(const Path: AnsiString): AnsiString;
+var
+  PIDL: PItemIDList;
+  Desktop: IShellFolder;
+  AnsiName: AnsiString;
+  WideName: array[0..MAX_PATH] of WideChar;
+  Eaten, Attr: ULONG;
+begin
+  Result := Path;
+  if Path <> '' then
+  begin
+    if Succeeded(SHGetDesktopFolder(Desktop)) then
+    begin
+      MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, PAnsiChar(Path), -1, WideName, MAX_PATH);
+      if Succeeded(Desktop.ParseDisplayName(0, nil, WideName, Eaten, PIDL, Attr)) then
+      try
+        SetLength(AnsiName, MAX_PATH);
+        if SHGetPathFromIDList(PIDL, PChar(AnsiName)) then
+          StrResetLength(AnsiName);
+        Result := AnsiName;
+      finally
+        CoTaskMemFree(PIDL);
+      end;
+    end;
+  end;
+end;
+
+function LongNameToShortName(const FileName: string): string;
+var
+  Buf: PChar;
+  BufSize: Integer;
+begin
+  BufSize := GetShortPathName(PChar(FileName), nil, 0) + 1;
+  GetMem(Buf, BufSize * SizeOf(Char));
+  try
+    GetShortPathName(PChar(FileName), Buf, BufSize);
+    Result := Buf;
+  finally
+    FreeMem(Buf);
+  end;
+end;
+
+function ShortNameToLongName(const FileName: AnsiString): AnsiString;
+const
+{$IFDEF UNICODE_STRING}
+  SCnGetLongPathName = 'GetLongPathNameW';
+{$ELSE}
+  SCnGetLongPathName = 'GetLongPathNameA';
+{$ENDIF}
+begin
+  Result := FileName;
+  if not Assigned(_GetLongPathName) then
+    _GetLongPathName := GetProcAddress(Kernel32Handle, SCnGetLongPathName);
+  if Assigned(_GetLongPathName) then
+  begin
+    SetLength(Result, MAX_PATH);
+    SetLength(Result, _GetLongPathName(PChar(FileName), PChar(Result), MAX_PATH));
+  end
+  else
+  begin
+    Result := ShellGetLongPathName(FileName);
+  end;
+end;
+
+function CreateGuidString: string;
+var
+  P: PWideChar;
+  GUID: TGUID;
+begin
+  CoCreateGuid(GUID);
+  if not Succeeded(StringFromCLSID(GUID, P)) then
+    Result := ''
+  else
+    Result := P;
+  CoTaskMemFree(P);
+end;
+
+function GetLocalIP: string;
+type
+  TaPInAddr = array[0..10] of PInAddr;
+
+  PaPInAddr = ^TaPInAddr;
+var
+  phe: PHostEnt;
+  pptr: PaPInAddr;
+  Buffer: array[0..63] of AnsiChar;
+  I: Integer;
+  GInitData: TWSADATA;
+begin
+  Result := '';
+  GetHostName(Buffer, SizeOf(Buffer));
+  phe := GetHostByName(buffer);
+  if phe = nil then
+    Exit;
+  pptr := PaPInAddr(Phe^.h_address_list);
+  I := 0;
+  while pptr^[I] <> nil do
+  begin
+    if Result = '' then
+      result := StrPas(inet_ntoa(pptr^[I]^))
+    else
+      result := result + ',' + StrPas(inet_ntoa(pptr^[I]^));    //IP地址
+     //Result := inet_addr(inet_ntoa(pptr^[I]^)); //整型值的IP地址
+    Inc(I);
+  end;
+end;
+
+function UrlEncode(AUrl: string): string;
+begin
+  result := HttpEncode(Aurl);
+end;
+
+function GetWindowsDriver: string;
+var
+  pcWindowsDirectory: PChar;
+  dwWDSize: DWORD;
+begin
+  dwWDSize := MAX_PATH + 1;
+  GetMem(pcWindowsDirectory, dwWDSize); // allocate memory for the string
+  try
+    try
+      if Windows.GetWindowsDirectory(pcWindowsDirectory, dwWDSize) <> 0 then
+        Result := pcWindowsDirectory;
+    finally
+      FreeMem(pcWindowsDirectory); // now free the memory allocated for the string
+    end;
+    Result := UpperCase(Copy(Result, 1, 3));
+  except
+    Result := 'C:\';
+  end;
+end;
+
+procedure OpenUrl(const Url: string);
+begin
+  try
+    ShellOpen(Url);
+  except
+  end;
+end;
+
+procedure ShellOpen(const DocName: string);
+begin
+  ShellExecute(0, 'OPEN', PChar(DocName), nil, nil, SW_SHOWNORMAL);
+end;
+
+function GetThreadCount(PID: THandle): Integer;
+var
+  hSnapshot: THandle;
+  lppe: PROCESSENTRY32;
+begin
+  // 刷新进程
+  Result := 0;
+  hSnapshot := CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  try
+    FillChar(lppe, SizeOf(lppe), #0);
+    lppe.dwSize := SizeOf(lppe);
+    if Process32First(hSnapshot, lppe) then
+    begin
+      repeat
+        if lppe.th32ProcessID = PID then
+        begin
+          Result := lppe.cntThreads;
+          Exit;
+        end;
+      until Process32Next(hSnapshot, lppe) = False;
+    end;
+  finally
+    CloseHandle(hSnapshot);
+  end;
+end;
+
+function GetThreadIds(PID: THandle; out ThreadIds: threadsArr): integer;
+var
+  hSnapshot: THandle;
+  lppe: THREADENTRY32;
+begin
+  Result := 0;
+  hSnapshot := CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+  try
+    FillChar(lppe, SizeOf(lppe), #0);
+    lppe.dwSize := SizeOf(lppe);
+    if Thread32First(hSnapshot, lppe) then
+    begin
+      repeat
+        if lppe.th32OwnerProcessID = PID then
+        begin
+          ThreadIds[Result] := lppe.th32ThreadID;
+          Inc(Result);
+        end;
+      until Thread32Next(hSnapshot, lppe) = False;
+    end;
+  finally
+    CloseHandle(hSnapshot);
+  end;
+end;
+
+function GetProcessMemorySize(PID: THandle): Cardinal;
+var
+  l_nTmpHandle: THandle;
+  l_pPMC: PPROCESS_MEMORY_COUNTERS;
+  l_pPMCSize: Cardinal;
+begin
+  try
+    l_pPMCSize := SizeOf(PROCESS_MEMORY_COUNTERS);
+    GetMem(l_pPMC, l_pPMCSize);
+    try
+      l_pPMC^.cb := l_pPMCSize;
+      l_nTmpHandle := OpenProcess(PROCESS_ALL_ACCESS, False, PID);
+      try
+        if (GetProcessMemoryInfo(l_nTmpHandle, l_pPMC, l_pPMCSize)) then
+          Result := l_pPMC^.WorkingSetSize
+        else
+          Result := 0;
+      finally
+        CloseHandle(l_nTmpHandle);
+      end;
+    finally
+      FreeMem(l_pPMC);
+    end;
+
+  except
+    Result := 0;
+  end;
+end;
+
+function GetPIDByProgramName(const APName: string): THandle;
+var
+  isFound: boolean;
+  AHandle, AhProcess: THandle;
+  ProcessEntry32: TProcessEntry32;
+  APath: array[0..MAX_PATH] of char;
+begin
+  Result := 0;
+  AHandle := CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  try
+    ProcessEntry32.dwSize := Sizeof(ProcessEntry32);
+    isFound := Process32First(AHandle, ProcessEntry32);
+
+    while isFound do
+    begin
+      AhProcess := OpenProcess(PROCESS_QUERY_INFORMATION or PROCESS_VM_READ, false, ProcessEntry32.th32ProcessID);
+      GetModuleFileNameEx(AhProcess, 0, @APath[0], sizeof(APath));
+
+      if (UpperCase(StrPas(APath)) = UpperCase(APName)) or (UpperCase(StrPas(ProcessEntry32.szExeFile)) = UpperCase(APName)) then
+      begin
+        Result := ProcessEntry32.th32ProcessID;
+        break;
+      end;
+      isFound := Process32Next(AHandle, ProcessEntry32);
+      CloseHandle(AhProcess);
+    end;
+  finally
+    CloseHandle(AHandle);
+  end;
+end;
+
+function GetSysDateSplit: Char;
+begin
+  Result := GetLocaleChar(GetThreadLocale, LOCALE_SDATE, '-');
+end;
+
+procedure SetThreadOnCPU(ThreadHandle: THandle; CPU: Cardinal);
+begin
+  SetThreadIdealProcessor(ThreadHandle, CPU mod GetNumberOfProcessor);
+end;
+
+function GetNumberOfProcessor: Integer;
+var
+  SysInfo: SYSTEM_INFO;
+begin
+  Windows.GetSystemInfo(sysInfo);
+  Result := SysInfo.dwNumberOfProcessors;
+end;
+
+function GetHandleCount: Integer;
+var
+  HandleCount: Cardinal;
+begin
+  AdjustDebugPrivilege(True);
+  HandleCount := 0;
+  GetProcessHandleCount(GetCurrentProcess, HandleCount);
+  Result := HandleCount;
+  AdjustDebugPrivilege(false);
+end;
+
+function GetSystemPageSize: Integer;
+var
+  SysInfo: SYSTEM_INFO;
+begin
+  Windows.GetSystemInfo(sysInfo);
+  Result := SysInfo.dwPageSize;
+end;
+
+function BigEndianToSys(V: Cardinal): Cardinal;
+begin
+  if ByteOrder = boBigEndian then
+    Result := V
+  else
+  begin
+    Result := (V shr 24) or ((V shr 8) and $ff00) or (V shl 24) or ((V shl 8) and $ff0000);
+  end;
+end;
+
+function SysToBigEndian(V: Cardinal): Cardinal;
+begin
+  if ByteOrder = boBigEndian then
+    Result := V
+  else
+  begin
+    Result := (V shr 24) or ((V shr 8) and $ff00) or (V shl 24) or ((V shl 8) and $ff0000);
+  end;
+end;
+
+function LittleEndianToSys(V: Cardinal): Cardinal;
+begin
+  if ByteOrder = boLittleEndian then
+    Result := V
+  else
+  begin
+    Result := (V shr 24) or ((V shr 8) and $ff00) or (V shl 24) or ((V shl 8) and $ff0000);
+  end;
+end;
+
+function SysToLittleEndian(V: Cardinal): Cardinal;
+begin
+  if ByteOrder = boLittleEndian then
+    Result := V
+  else
+  begin
+    Result := (V shr 24) or ((V shr 8) and $ff00) or (V shl 24) or ((V shl 8) and $ff0000);
+  end;
+end;
+
+function SameHour(Former, later: TDateTime): Boolean;
+begin
+  Result := Trunc(later * HoursPerDay) = Trunc(Former * HoursPerDay);
+end;
+
+function SameDay(Former, later: TDateTime): Boolean;
+begin
+  Result := Trunc(later) = Trunc(Former);
+end;
+
+function SameMonth(Former, later: TDateTime): Boolean;
+var
+  year, month, day, hour, minute, second, msec, year2, month2: Word;
+begin
+  DecodeDateTime(Former, year, month, day, hour, minute, second, msec);
+  DecodeDateTime(later, year2, month2, day, hour, minute, second, msec);
+  Result := (year = year2) and (month = month2);
+end;
+
+function SameYear(Former, Later: TDateTime): Boolean;
+var
+  year, month, day, hour, minute, second, msec, year2: Word;
+begin
+  DecodeDateTime(Former, year, month, day, hour, minute, second, msec);
+  DecodeDateTime(later, year2, month, day, hour, minute, second, msec);
+  Result := (year = year2);
+end;
+
+procedure MemHexTem(const Buffer; Size: LongWord; Hex: PAnsiChar);
+const
+  HEXADECIMAL_CHARS: array [0..$f] of AnsiChar =
+      ('0', '1', '2', '3', '4', '5', '6', '7',
+       '8', '9', 'a', 'b', 'c', 'd', 'e', 'f');
+var
+  i: LongWord;
+begin
+  for i := 0 to Size - 1 do
+  begin
+    Hex[i] := HEXADECIMAL_CHARS[PByte(Pointer(LongWord(@Buffer) + i))^ shr 4];
+    Hex[i + 1] := HEXADECIMAL_CHARS[PByte(Pointer(LongWord(@Buffer) + i))^ and $0f];
+  end;
+end;
+
+function MemHex(const Buffer; Size: LongWord): AnsiString;
+begin
+  SetLength(Result, Size);
+  MemHexTem(Buffer, Size, PAnsiChar(Result));
+end;
+
+function GetCurrentPath: string;
+begin
+  Result := ExtractFilePath(ParamStr(0));
+  if RightStr(Result, 1) <> '\' then
+    Result := Result + '\';
+end;
+
+function GetAppDataPath: string;
+const
+  MAX_PATH = 260;
+var
+  Path: array[0..MAX_PATH] of Char;
+begin
+  SHGetSpecialFolderPath(0, Path, CSIDL_APPDATA, True);
+  SetString(Result, Path, StrLen(Path));
+  if RightStr(Result, 1) <> '\' then
+    Result := Result + '\';
+end;
+
+function GetTempPath: string;
+var
+  nBufferLength: DWORD; // size, in characters, of the buffer
+  lpBuffer: PChar; // address of buffer for temp. path
+begin
+  nBufferLength := MAX_PATH + 1; // initialize
+  GetMem(lpBuffer, nBufferLength);
+  try
+    if Windows.GetTempPath(nBufferLength, lpBuffer) <> 0 then
+    begin
+      Result := StrPas(lpBuffer);
+      if RightStr(Result, 1) <> '\' then
+        Result := Result + '\';
+    end
+    else
+      Result := '';
+  finally
+    FreeMem(lpBuffer);
+  end;
+end;
+
+//获取系统字节序
+procedure DetectByteOrder;
+var
+  IV: Integer;
+begin
+  IV := $12345678;
+  if PByte(@IV)^ = $12 then
+    ByteOrder := boBigEndian
+  else
+    ByteOrder := boLittleEndian;
+end;
+
+procedure PinAppToWin7Taskbar(Path, App: string);
+var
+  Shell, Folder, FolderItem, ItemVerbs: Variant;
+  vPath, vApp: Variant;
+  I: Integer;
+  Str: string;
+  H: HINST;
+  PinName: array[0..255] of Char;
+begin
+  Shell := CreateOleObject('Shell.Application');
+  vPath := Path;
+  Folder := Shell.NameSpace(vPath);
+  vApp := App;
+  FolderItem := Folder.ParseName(vApp);
+  ItemVerbs := FolderItem.Verbs;
+
+  H := LoadLibrary('Shell32.dll');
+  LoadString(H, 5386, PinName, 256);
+  FreeLibrary(H);
+
+  for I := 1 to ItemVerbs.Count do
+  begin
+    Str := ItemVerbs.Item(I).Name;
+    if SameText(Str, PinName) then
+      ItemVerbs.Item(I).DoIt;
+  end;
+end;
+
+function GetShiftState: TShiftState;
+var
+  KeyState: TKeyboardState;
+
+  function IsDown(Key: Byte): Boolean;
+  begin
+    Result := (Key and $80) = $80;
+  end;
+
+begin
+  Result := [];
+  GetKeyboardState(KeyState);
+  if IsDown(KeyState[VK_LSHIFT]) or IsDown(KeyState[VK_RSHIFT]) then
+    Include(Result, ssShift);
+  if IsDown(KeyState[VK_LMENU]) or IsDown(KeyState[VK_RMENU]) then
+    Include(Result, ssAlt);
+  if IsDown(KeyState[VK_LCONTROL]) or IsDown(KeyState[VK_RCONTROL]) then
+    Include(Result, ssCtrl);
+  if IsDown(KeyState[VK_LBUTTON]) then
+    Include(Result, ssLeft);
+  if IsDown(KeyState[VK_RBUTTON]) then
+    Include(Result, ssRight);
+  if IsDown(KeyState[VK_MBUTTON]) then
+    Include(Result, ssMiddle);
+end;
+
+procedure StayOnTop(Handle: HWND; OnTop: Boolean);
+const
+  csOnTop: array[Boolean] of HWND = (HWND_NOTOPMOST, HWND_TOPMOST);
+begin
+  SetWindowPos(Handle, csOnTop[OnTop], 0, 0, 0, 0, SWP_NOMOVE or SWP_NOSIZE or SWP_NOACTIVATE);
+end;
+
+procedure SetHidden(Hide: Boolean);
+var
+  WndLong: Integer;
+begin
+  WndLong := GetWindowLong(Application.Handle, GWL_EXSTYLE);
+  ShowWindow(Application.Handle, SW_HIDE);
+  if Hide then
+    SetWindowLong(Application.Handle, GWL_EXSTYLE, WndLong or WS_EX_TOOLWINDOW and not WS_EX_APPWINDOW or WS_EX_TOPMOST)
+  else
+    SetWindowLong(Application.Handle, GWL_EXSTYLE, WndLong);
+  ShowWindow(Application.Handle, SW_SHOW);
+end;
+
+procedure SetTaskBarVisible(Visible: Boolean);
+var
+  wndHandle: THandle;
+begin
+  wndHandle := FindWindow('Shell_TrayWnd', nil);
+  ShowWindow(wndHandle, csWndShowFlag[Visible]);
+end;
+
+procedure SetDesktopVisible(Visible: Boolean);
+var
+  hDesktop: THandle;
+begin
+  hDesktop := FindWindow('Progman', nil);
+  ShowWindow(hDesktop, csWndShowFlag[Visible]);
+end;
+
+function ForceForegroundWindow(HWND: HWND): Boolean;
+var
+  ThreadID1, ThreadID2: DWORD;
+begin
+  if HWND = GetForegroundWindow then
+    Result := True
+  else
+  begin
+    ThreadID1 := GetWindowThreadProcessId(GetForegroundWindow, nil);
+    ThreadID2 := GetWindowThreadProcessId(HWND, nil);
+    if ThreadID1 <> ThreadID2 then
+    begin
+      AttachThreadInput(ThreadID1, ThreadID2, True);
+      Result := SetForegroundWindow(HWND);
+      AttachThreadInput(ThreadID1, ThreadID2, False);
+    end
+    else
+      Result := SetForegroundWindow(HWND);
+    if IsIconic(HWND) then
+      ShowWindow(HWND, SW_RESTORE)
+    else
+      ShowWindow(HWND, SW_SHOW);
+  end;
+end;
+
+function GetWorkRect(const Form: TCustomForm = nil): TRect;
+var
+  Monitor: TMonitor;
+  MonInfo: TMonitorInfo;
+begin
+  Result.Top := 0;
+  Result.Left := 0;
+  Result.Right := Screen.Width;
+  Result.Bottom := Screen.Height;
+  if Assigned(Form) then
+  begin
+    Monitor := Form.Monitor;
+    if Assigned(Monitor) then
+    begin
+      MonInfo.cbSize := SizeOf(MonInfo);
+      GetMonitorInfo(Monitor.Handle, @MonInfo);
+      Result := MonInfo.rcWork;
+    end;
+  end
+  else
+    SystemParametersInfo(SPI_GETWORKAREA, 0, @Result, 0);
+end;
+
+function GetHzPy(const AHzStr: AnsiString): AnsiString;
+const
+  ChinaCode: array[0..25, 0..1] of Integer = ((1601, 1636), (1637, 1832), (1833, 2077), (2078, 2273), (2274, 2301), (2302, 2432), (2433, 2593), (2594, 2786), (9999, 0000), (2787, 3105), (3106, 3211), (3212, 3471), (3472, 3634), (3635, 3722), (3723, 3729), (3730, 3857), (3858, 4026), (4027, 4085), (4086, 4389), (4390, 4557), (9999, 0000), (9999, 0000), (4558, 4683), (4684, 4924), (4925, 5248), (5249, 5589));
+var
+  i, j, HzOrd: Integer;
+begin
+  Result := '';
+  i := 1;
+  while i <= Length(AHzStr) do
+  begin
+    if (AHzStr[i] >= #160) and (AHzStr[i + 1] >= #160) then
+    begin
+      HzOrd := (Ord(AHzStr[i]) - 160) * 100 + Ord(AHzStr[i + 1]) - 160;
+      for j := 0 to 25 do
+      begin
+        if (HzOrd >= ChinaCode[j][0]) and (HzOrd <= ChinaCode[j][1]) then
+        begin
+          Result := Result + AnsiChar(Byte('A') + j);
+          Break;
+        end;
+      end;
+      Inc(i);
+    end
+    else
+      Result := Result + AHzStr[i];
+    Inc(i);
+  end;
+end;
+
+function TextFullWidthToHalfWidth(const Text: string): string;
+var
+  s: string;
+  s1, s2: WideString;
+  l: Integer;
+begin
+  // 中文句号和顿号不会自动替换为 . 号，需要自行处理
+  s := StringReplace(Text, '。', '.', [rfReplaceAll]);
+  s := StringReplace(s, '、', ',', [rfReplaceAll]);
+  s1 := s;
+  l := Length(s1);
+  SetLength(s2, l);
+  LCMapStringW(GetThreadLocale, LCMAP_HALFWIDTH, PWideChar(s1), l, PWideChar(s2), l);
+  Result := s2;
+end;
+
+function TextHalfWidthToFullWidth(const Text: string): string;
+var
+  s1, s2: WideString;
+  l: Integer;
+begin
+  s1 := Text;
+  l := Length(s1);
+  SetLength(s2, l);
+  LCMapStringW(GetThreadLocale, LCMAP_FULLWIDTH, PWideChar(s1), l, PWideChar(s2), l);
+  Result := s2;
+end;
+
+function AdjustDebugPrivilege(Enable: Boolean): Boolean;
+var
+  Token: THandle;
+
+  function InternalEnablePrivilege(Token: Cardinal; PrivName: string; Enable: Boolean): Boolean;
+  var
+    TP: TOKEN_PRIVILEGES;
+    Dummy: Cardinal;
+  begin
+    TP.PrivilegeCount := 1;
+    LookupPrivilegeValue(nil, PChar(PrivName), TP.Privileges[0].Luid);
+    if Enable then
+      TP.Privileges[0].Attributes := SE_PRIVILEGE_ENABLED
+    else
+      TP.Privileges[0].Attributes := 0;
+
+    AdjustTokenPrivileges(Token, False, TP, SizeOf(TP), nil, Dummy);
+    Result := GetLastError = ERROR_SUCCESS;
+  end;
+
+begin
+  OpenProcessToken(GetCurrentProcess, TOKEN_ADJUST_PRIVILEGES, Token);
+  Result := InternalEnablePrivilege(Token, 'SeDebugPrivilege', Enable);
+  CloseHandle(Token);
+end;
+
+procedure KillProcessByFileName(const FileName: string);
+var
+  ID: DWORD;
+  S, Tmp: string;
+  Ret: Boolean;
+  SnapshotHandle: THandle;
+  PE32: TProcessEntry32;
+  hh: HWND;
+begin
+  S := LowerCase(FileName);
+  SnapshotHandle := CreateToolHelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  PE32.dwSize := SizeOf(PE32);
+  Ret := Process32First(SnapshotHandle, PE32);
+  while Integer(Ret) <> 0 do
+  begin
+    Tmp := LowerCase(PE32.szExeFile);
+    if Pos(Tmp, S) > 0 then
+    begin
+      Id := PE32.th32ProcessID;
+      hh := OpenProcess(PROCESS_ALL_ACCESS, True, Id);
+      TerminateProcess(hh, 0);
+    end;
+    Ret := Process32Next(SnapshotHandle, PE32);
+  end;
+end;
+
+type
+  POSVersionInfoEx = ^TOSVersionInfoEx;
+
+  TOSVersionInfoEx = packed record
+    dwOSVersionInfoSize: DWORD;
+    dwMajorVersion: DWORD;
+    dwMinorVersion: DWORD;
+    dwBuildNumber: DWORD;
+    dwPlatformId: DWORD;
+    szCSDVersion: array[0..127] of AnsiChar;
+    wServicePackMajor: Word;
+    wServicePackMinor: Word;
+    wSuiteMask: Word;
+    wProductType: Byte;
+    wReserved: Byte;
+  end;
+
+const
+  VER_NT_WORKSTATION = $0000001;           //非服务器版本
+  VER_NT_SERVER = $0000003;                //服务器版本
+  VER_NT_DOMAIN_CONTROLLER = $0000002;     //域服务器版本
+  VER_SUITE_WH_SERVER = $00008000;
+  PROCESSOR_ARCHITECTURE_AMD64 = 9;
+  PROCESSOR_ARCHITECTURE_IA64 = 6;
+  SM_SERVERR2 = 89;
+
+/// <remarks>
+/// 是否是64位系统
+/// </remarks>
+function IsWin64: Boolean;
+var
+  Kernel32Handle: THandle;
+  IsWow64Process: function(Handle: Windows.THandle; var Res: Windows.BOOL): Windows.BOOL; stdcall;
+  GetNativeSystemInfo: procedure(var lpSystemInfo: TSystemInfo); stdcall;
+  isWoW64: Bool;
+  SystemInfo: TSystemInfo;
+begin
+  Kernel32Handle := GetModuleHandle('KERNEL32.DLL');
+  if Kernel32Handle = 0 then
+    Kernel32Handle := LoadLibrary('KERNEL32.DLL');
+  if Kernel32Handle <> 0 then
+  begin
+    IsWOW64Process := GetProcAddress(Kernel32Handle, 'IsWow64Process');
+    GetNativeSystemInfo := GetProcAddress(Kernel32Handle, 'GetNativeSystemInfo');
+    if Assigned(IsWow64Process) then
+    begin
+      IsWow64Process(GetCurrentProcess, isWoW64);       //如果当前进程是32位，操作系统是64位，isWoW64返回True，否则为False（注，进程和系统都是64位也是返回False）
+      Result := isWoW64 and Assigned(GetNativeSystemInfo);
+      if Result then
+      begin
+        GetNativeSystemInfo(SystemInfo);
+        Result := (SystemInfo.wProcessorArchitecture = PROCESSOR_ARCHITECTURE_AMD64) or (SystemInfo.wProcessorArchitecture = PROCESSOR_ARCHITECTURE_IA64);
+      end;
+    end
+    else
+      Result := False;
+  end
+  else
+    Result := False;
+end;
+
+function GetWindowsVersion: string;
+var
+  Version: TOSVersionInfoEx;
+  systemInfo: TSystemInfo;
+  OSIs64Bit: Boolean;
+begin
+  FillChar(Version, SizeOf(TOSVersionInfoEx), 0);
+  Version.dwOSVersionInfoSize := SizeOf(TOSVersionInfoEx);
+  GetSystemInfo(systemInfo);
+  OSIs64Bit := IsWin64;
+  if GetVersionEx(TOSVersionInfo(addr(Version)^)) then
+  begin
+    case Version.dwMajorVersion of
+      4:
+        begin
+          case Version.dwMinorVersion of
+            0:
+              begin
+                case Version.dwPlatformId of
+                  VER_PLATFORM_WIN32_NT:
+                    begin
+                      Result := 'Windows NT 4.0';
+                    end;
+                  VER_PLATFORM_WIN32_WINDOWS:
+                    begin
+                      Result := 'Windows 95';
+                    end;
+                end;
+              end;
+            10:
+              begin
+                Result := 'Windows 98';
+              end;
+            90:
+              begin
+                Result := 'Windows Me';
+              end;
+          end;
+        end;
+      5:
+        begin
+          case Version.dwMinorVersion of
+            0:
+              begin
+                Result := 'Windows 2000';
+              end;
+            1:
+              begin
+                Result := 'Windows Xp';
+              end;
+            2:
+              begin
+                if Version.wSuiteMask = VER_SUITE_WH_SERVER then
+                begin
+                  Result := 'Windows Home Server';
+                end
+                else if (Version.wProductType = VER_NT_WORKSTATION) then
+                begin
+                  Result := 'Windows XP';
+                end
+                else if GetSystemMetrics(SM_SERVERR2) = 0 then
+                begin
+                  Result := 'Windows Server 2003';
+                end
+                else
+                begin
+                  Result := 'Windows Server 2003 R2';
+                end;
+                if OSIs64Bit then
+                begin
+                  Result := Result + ' X64';
+                end;
+              end;
+          end;
+        end;
+      6:
+        begin
+          case Version.dwMinorVersion of
+            0:
+              begin
+                if Version.wProductType = VER_NT_WORKSTATION then
+                begin
+                  Result := 'Windows Vista';
+                end
+                else
+                begin
+                  Result := 'Windows Server 2008';
+                end;
+              end;
+            1:
+              begin
+                if Version.wProductType = VER_NT_WORKSTATION then
+                begin
+                  Result := 'Windows 7';
+                end
+                else
+                begin
+                  Result := 'Windows Server 2008 R2';
+                end;
+              end;
+            2:
+              begin
+                if Version.wProductType = VER_NT_WORKSTATION then
+                begin
+                  Result := 'Windows 8';
+                end
+                else
+                begin
+                  Result := 'Windows Server 2012';
+                end;
+              end;
+            3:
+              begin
+                if Version.wProductType = VER_NT_WORKSTATION then
+                begin
+                  Result := 'Windows 8.1';
+                end
+                else
+                begin
+                  Result := 'Windows Server 2012 R2';
+                end;
+              end;
+          end;
+          if OSIs64Bit then
+          begin
+            Result := Result + ' X64';
+          end;
+        end;
+    end;
+  end
+  else
+  begin
+    Result := '获取操作系统版本错误！'
+  end;
+end;
+
+function DataToHex(Data: PChar; Len: integer): string;
+begin
+  SetLength(Result, Len shl 1);
+  BinToHex(Data, PChar(Result), Len);
+end;
+
+function DataToHex(Data: PAnsiChar; Len: integer): AnsiString;
+begin
+  SetLength(Result, Len);
+  BinToHex(Data, PAnsiChar(Result), Len);
+end;
+
+function HexToData(str: string): PWideChar;
+var
+  len: Integer;
+  Resultlen: integer;
+  R: PWideChar;
+begin
+  len := Length(str);
+  Resultlen := len shr 1;
+  R := GetMemory(Resultlen + 1);
+  ZeroMemory(R, Resultlen + 1);
+  HexToBin(PWideChar(str), R, len);
+  Result := R;
+  FreeMemory(R);
+end;
+
+function CheckNumOrABCStr(str: string; Tag: Integer; NotCheck: string = ''): Boolean;
+var
+  strLen, NotCheckLen: integer;
+  I, tem: Integer;
+  Astr: string;
+begin
+  Result := true;
+  Astr := UpperCase(str);
+  strlen := Length(Astr);
+  NotCheckLen := Length(NotCheck);
+  for I := 1 to strLen do
+  begin
+    tem := Ord(Astr[I]);
+    if Tag mod 2 = 1 then
+    begin
+      if (tem > 47) and (tem < 58) then
+      begin
+        Continue;
+      end;
+    end;
+    if Tag > 1 then
+    begin
+      if (tem > 64) and (tem < 91) then
+      begin
+        Continue;
+      end;
+      if (tem > 96) and (tem < 123) then
+      begin
+        Continue;
+      end;
+    end;
+    if NotCheckLen > 0 then
+    begin
+      if Pos(Astr[I], NotCheck) > 0 then
+      begin
+        Continue;
+      end;
+    end;
+    Result := False;
+    Break;
+  end;
+end;
+
+function IP2Int(IP: string): Cardinal;
+begin
+  Result := inet_addr(PAnsiChar(IP));
+end;
+
+function Int2IP(IntIP: Cardinal): string;
+var
+  Iadr: in_addr;
+begin
+  Iadr.S_addr := IntIP;
+  Result := StrPas(inet_ntoa(Iadr));
+end;
+
+function GetCurrentExeType: TExeType;
+var
+  hStdOut: THandle;
+begin
+  hStdOut := GetStdHandle(STD_OUTPUT_HANDLE);
+  if hStdOut = INVALID_HANDLE_VALUE then
+    RaiseLastOsError;
+  Result := EtUnknown;
+  case GetFileType(hStdOut) of
+    FILE_TYPE_UNKNOWN:
+      Result := EtUnknown;
+    FILE_TYPE_DISK:
+      Result := EtFile;
+    FILE_TYPE_CHAR:
+      Result := EtConsole;
+    FILE_TYPE_PIPE:
+      Result := EtPipe;
+  end;
+end;
+
+function LastErrMsg: string;
+begin
+  Result := Exception(ExceptObject).Message;
+end;
+
+function SizeConvert(ASize: UInt64): string;
+const
+  units: array[0..6] of string = (' B', ' KB', ' MB', ' GB', ' TB', ' PB', ' EB');
+var
+  Data: Extended;
+  InitUnit: integer;
+begin
+  InitUnit := 0;
+  Data := ASize;
+  while Data >= 1024 do
+  begin
+    Inc(InitUnit);
+    Data := Data / 1024;
+  end;
+  Result := FormatFloat('.000', Data) + units[InitUnit];
+end;
+
+function SecondConvert(Second:UInt64):String;
+const
+  Tmp : array[0..3] of Byte = (60,60,60,24);
+  Tmpstr:array[0..3] of string = ('秒','分','时','天');
+var
+  Data:UInt64;
+  Value:Cardinal;
+  I : integer;
+begin
+  Data := Second;
+  I := 0;
+  Result := '';
+  while Data>0 do
+  begin
+    Value  := Data mod Tmp[I];
+    if Value>0 then
+    Result := IntToStr(Value)+Tmpstr[I] + Result;
+    Inc(I);
+    if I>=Length(Tmp) then
+    begin
+      Break;
+    end;
+    Data := Data div Tmp[I];
+  end;
+end;
+
+function DeleteArrItem(PArray: Pointer; DelIndex: NativeInt; ItemSize: NativeInt; Count: NativeInt; DelCount: NativeInt = 1): Boolean;
+var
+  P: Pinteger;
+begin
+  Result := False;
+  if DelIndex + Delcount > Count then
+    Exit;
+
+  P := Pinteger(NativeInt(PArray) - sizeof(NativeInt));
+  if DelIndex + DelCount = Count then    //删除的最后的数据
+  begin
+    P^ := Count - DelCount;
+  end
+  else
+  begin
+    Move(Pointer(NativeInt(PArray) + (DelIndex + 1) * ItemSize)^, Pointer(NativeInt(PArray) + (DelIndex + DelCount-1) * ItemSize)^, (Count - DelIndex - DelCount) * ItemSize);
+    P^ := Count - DelCount;
+  end;
+  Result := True;
+end;
+
+procedure SearchFileEx(const Path, Ext: string; Files: TStrings);
+var
+  Found: TSearchRec;
+  i: integer;
+  Dirs: TStrings;
+  Finished: integer;
+  StopSearch: Boolean;
+begin
+  StopSearch := False;
+  Dirs := TStringList.Create;
+  Finished := FindFirst(Path + '*.*', 63, Found);
+  while (Finished = 0) and not (StopSearch) do
+  begin
+    if (Found.Name <> '.') and ((Found.Name <> '..')) then
+    begin
+      if (Found.Attr and faDirectory) = faDirectory then
+        Dirs.Add(Path + Found.Name + '\')
+      else if Pos(UpperCase(Ext), UpperCase(Found.Name)) > 0 then
+        Files.Add(Path + Found.Name);
+    end;
+    Finished := FindNext(Found);
+  end;
+  FindClose(Found);
+  if not StopSearch then
+    for i := 0 to Dirs.Count - 1 do
+      SearchFileEx(Dirs[i], Ext, Files);
+  Dirs.Free;
+end;
+
+function RightstrEx(str: string; Count: integer): string;
+begin
+  Result := str;
+  Delete(Result, 1, Length(Result) - count);
+end;
+
+function LeftstrEx(str: string; Count: integer): string;
+begin
+  Result := str;
+  Delete(Result, count + 1, Length(Result) - count);
+end;
+
+function DelRight(str: string; start: string; Index: Integer): string;
+var
+  i: integer;
+  j: Integer;
+begin
+  Result := str;
+  i := 0;
+  for j := 0 to index - 1 do
+  begin
+    i := PosEx(start, str, i + 1);
+    if i = 0 then
+      Exit;
+  end;
+  Result := LeftstrEx(str, i - length(start));
+end;
+
+function GetDriveFileSystem(DirveName: string): string;
+var
+  Drive: string;
+  VolName: array[0..255] of Char;
+  SerialNumber: DWORD;
+  MaxCLength: DWORD;
+  FileSysFlag: DWORD;
+  FileSysName: array[0..255] of Char;
+begin
+  Result := '';
+  Fillchar(FileSysName[0], 256, 0);
+  Drive := ExtractFileDrive(DirveName) + '\';
+  GetVolumeInformation(PWideChar(Drive), VolName, 255, @SerialNumber, MaxCLength, FileSysFlag, FileSysName, 255);
+  Result := StrPas(FileSysName);
+end;
+
+function GetDriveSpace(DriveName: string; out FreeSpace: Int64; out ToatleSpace: int64): Boolean;
+var
+  ToatalFree: PLargeInteger;
+  Drive: string;
+begin
+  Drive := ExtractFileDrive(DriveName);
+  Result := GetDiskFreeSpaceEx(PWideChar(Drive), FreeSpace, ToatleSpace, ToatalFree);
+end;
+
+function HostToIP(Host: AnsiString; var IP: AnsiString): Boolean;
+var
+  hostName: array[0..255] of AnsiChar;
+  hostEnt: PHostEnt;
+  addr: PAnsiChar;
+begin
+  gethostname(hostName, sizeof(hostName));
+  StrPCopy(hostName, Host);
+  hostEnt := gethostbyname(hostName);
+  if Assigned(hostEnt) then
+    if Assigned(hostEnt^.h_address_list) then
+    begin
+      addr := hostEnt^.h_address_list^;
+      if Assigned(addr) then
+      begin
+        IP := Format('%d.%d.%d.%d', [byte(addr[0]), byte(addr[1]), byte(addr[2]), byte(addr[3])]);
+        Result := True;
+      end
+      else
+        Result := False;
+    end
+    else
+      Result := False
+  else
+  begin
+    Result := False;
+  end;
+end;
+
+
+function Unicode2Ansic(Str: AnsiString): string;
+var
+   s: PAnsiChar;
+   i,j: integer;
+   tmp: AnsiString;
+begin
+   tmp := '';
+   result := '';
+   s := PAnsiChar(str);
+   i := 0;
+   while i < length(s) do
+   begin
+      j := Length(s)-i;
+      if j>=6 then
+      begin
+        if (s[i]='\') and (LowerCase(s[i+1])='u') then
+        begin
+          Inc(i,2);
+          tmp := tmp + AnsiChar(StrToInt('$'+s[i + 2] + s[i + 3])) + AnsiChar(StrToInt('$'+s[i] + s[i + 1]));//unicode转换时,高低位互换
+          Inc(i,4);
+        end else
+        begin
+          tmp := tmp+s[i]+#0;
+          Inc(i,1);
+        end;
+      end else
+      begin
+        tmp := tmp+s[i]+#0;
+        Inc(i,1);
+      end;
+   end;
+   tmp := tmp + #0#0;
+   result := widechartostring(pWideChar(tmp));
+end;
+
+function GetSpecialFolder(AWonerHandle: THandle; APathType: PathType): string;
+var
+  pidl: PItemIDList;
+  FavPath: array[0..MAX_PATH] of char;
+  temp : integer;
+  i : byte;
+begin
+  case APathType of
+    DeskTop: temp := CSIDL_DESKTOP; //桌面;
+    DeskTopDirectory: temp := CSIDL_DESKTOPDIRECTORY; //桌面目录
+    Fonts: temp := CSIDL_FONTS; //字体目录
+    NetHood: temp := CSIDL_NETHOOD; //网络邻居
+    Personal: temp := CSIDL_PERSONAL; //我的文档目录
+    Programs: temp := CSIDL_PROGRAMS; //开始菜单程序目录
+    Recent: temp := CSIDL_RECENT; //存放用户最近访问文件快捷方式的目录
+    SendTo: temp := CSIDL_SENDTO; //"发送到"目录
+    StartMenu: temp := CSIDL_STARTMENU; //开始菜单目录
+    StartUp: temp := CSIDL_STARTUP; //开始菜单启动项目录
+    Favorites: temp := CSIDL_FAVORITES; //收藏夹目录
+    else
+    temp := integer(APathType);
+  end;
+  SHGetSpecialFolderLocation(AWonerHandle, temp, pidl);
+  SHGetPathFromIDList(pidl, favpath);
+  Result := StrPas(FavPath);
+end;
+
+end.
+

@@ -1,0 +1,744 @@
+unit GLHTTPClient;
+
+interface
+
+uses
+  GLClientSocketStream, Classes, SysUtils, StrUtils, GLLogger;
+
+const
+  DefaultAccept = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8';
+  DefaultPostAccept = '*/*';
+  DefaultEncoding = 'gzip,deflate,sdch';
+  defaultLanguage = 'zh-CN,zh;q=0.8,en;q=0.6';
+  defaultConnection = 'keep-alive';
+  defaultUserAgent = 'Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 5.1; Trident/4.0; .NET CLR 2.0.50727; .NET4.0C; msn OptimizedIE8;ZHCN)';
+                    // 'Mozilla/5.0 (Windows NT 6.3; WOW64; Trident/7.0; rv:11.0) like Gecko';
+
+type
+  TOnGetDataCallBack = procedure(Contentsize, GetedSize, RecvSize: Cardinal) of object;
+
+  THttpRequest = class            //请求头
+  private
+    FCustom:TStringList;
+    FMethod: string;
+    FReqAccept: string;           //Accept:text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8
+    FReqAcceptCharset: string;
+    FReqAcceptEncoding: string;   //Accept-Encoding:gzip,deflate,sdch
+    FReqAcceptLanguage: string;
+    FReqConnection: string;
+    FReqHost: string;
+    FReqPage: string;
+    FReqPort: string;
+    FReqContentType: string;
+    FReqURL: string;
+    FUserAgent: string;
+    FPostDataStream: TMemoryStream;       //Post的数据
+    FCacheControl: string;
+    procedure SaveToStringList(StrList: TStringList);
+    procedure SetReqURL(const Value: string);
+    procedure SetMethod(const Value: string);
+  public
+    property CacheControl: string read FCacheControl write FCacheControl;
+    property Method: string read FMethod write SetMethod;
+    property PostDataStream: TMemoryStream read FPostDataStream write FPostDataStream;
+    property ReqAccept: string read FReqAccept write FReqAccept;
+    property ReqAcceptCharset: string read FReqAcceptCharset write FReqAcceptCharset;
+    property ReqAcceptEncoding: string read FReqAcceptEncoding write FReqAcceptEncoding;
+    property ReqAcceptLanguage: string read FReqAcceptLanguage write FReqAcceptLanguage;
+    property ReqConnection: string read FReqConnection write FReqConnection;
+    property ReqContentType: string read FReqContentType write FReqContentType;
+    property ReqHost: string read FReqHost write FReqHost;
+    property ReqPage: string read FReqPage write FReqPage;
+    property ReqPort: string read FReqPort write FReqPort;
+    property ReqURL: string read FReqURL write SetReqURL;                 //请求URL地址，包含端口等
+    property UserAgent: string read FUserAgent write FUserAgent;
+    property Custom: TStringList read FCustom write FCustom;
+
+    constructor Create;
+    destructor Destroy; override;
+    function SaveToString: string;
+  end;
+
+  THttpResponse = class                           //相应头
+  private
+    FHeaderstr:string;
+    FConnection: string;                               //是否长连接
+    FContentLength: string;                            //内容长度
+    FContentType: string;                              //text/html; charset=utf-8
+    FResultCode: Integer;                              //200表示成功
+    FContentEncoding: string;                           //'gzip,deflate,sdch';
+    FContentStream: TMemoryStream;                     //获取到的数据
+    FLocation: string;                                 //重定向地址
+    FResultState: string;
+    FServer: string;                                   //服务端服务软件类型
+    FTransferEncoding: string;                          //chunked                           //暂时不处理这种动态长度的，用FContentLength来弄
+    FHeaderLen: Integer;
+  public
+    property Connection: string read FConnection write FConnection;
+    property ContentEncoding: string read FContentEncoding write FContentEncoding;
+    property ContentLength: string read FContentLength write FContentLength;
+    property ContentStream: TMemoryStream read FContentStream write FContentStream;
+    property ContentType: string read FContentType write FContentType;
+    property Location: string read FLocation write FLocation;
+    property ResultState: string read FResultState write FResultState;
+    property ResultCode: Integer read FResultCode write FResultCode;
+    property Server: string read FServer write FServer;
+    property TransferEncoding: string read FTransferEncoding write FTransferEncoding;
+    property HeaderLen: Integer read FHeaderLen write FHeaderLen;
+    property Headerstr:string read FHeaderstr;
+
+    constructor Create;
+    destructor Destroy; override;
+    procedure LoadFromString(AStr: string);
+  end;
+
+  THttpCLient = class
+  private
+    FHttpRequest: THttpRequest;
+    FHttpResponse: THttpResponse;
+    FOnGetDataCallBack: TOnGetDataCallBack;
+    FRecvTimeOut, FConnectTimeOut: Integer;
+  public
+    property HttpRequest: THttpRequest read FHttpRequest write FHttpRequest;
+    property HttpResponse: THttpResponse read FHttpResponse write FHttpResponse;
+    property RecvTimeOut: Integer read FRecvTimeOut write FRecvTimeOut;
+    property ConnectTimeOut: integer read FConnectTimeOut write FConnectTimeOut;
+    property OnGetDataCallBack: TOnGetDataCallBack read FOnGetDataCallBack write FOnGetDataCallBack;
+    constructor Create;
+    destructor Destroy; override;
+    procedure SendRequest(TCPStream: TGLClientSocketStream);
+    procedure Read2Response(TCPStream: TGLClientSocketStream);
+    function HttpGet(URL: string): string; overload;
+    procedure HttpGet(URL: string; out Stream: Tstream); overload;
+    function HttpPost(URL:String;PostData:TstringList):string;overload;
+    function HttpPost(URL:String;PostData:TStream):string;overload;
+  end;
+
+function HttpGet(URL: string; ReadTimeOut: Integer = 45000; ConnectTimeOut: Integer = 3000): string; overload;
+
+procedure HttpGet(URL: string; out Stream: Tstream; ReadTimeOut: Integer = 45000; ConnectTimeOut: Integer = 3000); overload;
+
+function HttpPost(URL: string; PostData: TstringList; ConnectTimeOut: Integer = 3000): string;
+
+implementation
+
+uses
+  GLStreamPatch, Windows, ZLibExGZ;
+
+function DecompressGZip(AInStream, AOutStream: TStream):boolean;
+var
+  pb1, pb2: Byte;
+begin
+  AInStream.Seek(1, 0);
+  AInStream.Read(pb1, 1);
+  AInStream.Seek(2, 0);
+  AInStream.Read(pb2, 1);
+  AInStream.Position := 0;
+  AOutStream.Position := 0;
+  if (pb1 = $8B) and (pb2 = $8) then
+  begin
+    GZDecompressStream(AInStream, AOutStream);
+    result := true;
+  end
+  else
+  begin
+    AOutStream.CopyFrom(AInStream, AInStream.Size);
+    result := false;
+  end;
+end;
+
+function HttpPost(URL: string; PostData: TstringList; ConnectTimeOut: Integer = 3000): string;
+var
+  HttpReq: THttpCLient;
+begin
+  HttpReq := THttpCLient.Create;
+  try
+    HttpReq.ConnectTimeOut := ConnectTimeOut;
+    Result := HttpReq.HttpPost(URL, PostData);
+  finally
+    HttpReq.Free;
+  end;
+end;
+
+function HttpGet(URL: string; ReadTimeOut: Integer = 45000; ConnectTimeOut: Integer = 3000): string;
+var
+  HttpReq: THttpCLient;
+begin
+  HttpReq := THttpCLient.Create;
+  try
+    HttpReq.RecvTimeOut := ReadTimeOut;
+    HttpReq.ConnectTimeOut := ConnectTimeOut;
+    Result := HttpReq.HTTPGet(URL);
+  finally
+    HttpReq.Free;
+  end;
+end;
+
+procedure HttpGet(URL: string; out Stream: Tstream; ReadTimeOut: Integer = 45000; ConnectTimeOut: Integer = 3000); overload;
+var
+  HttpReq: THttpCLient;
+begin
+  HttpReq := THttpCLient.Create;
+  try
+    HttpReq.RecvTimeOut := ReadTimeOut;
+    HttpReq.ConnectTimeOut := ConnectTimeOut;
+    HttpReq.HTTPGet(URL, Stream);
+  finally
+    HttpReq.Free;
+  end;
+end;
+
+constructor THttpRequest.Create;
+begin
+  inherited;
+  FCustom := TStringList.Create;
+  // TODO -cMM: THttpRequest.Create default body inserted
+end;
+
+destructor THttpRequest.Destroy;
+begin
+  if Assigned(FPostDataStream) then
+    FPostDataStream.Free;
+  FCustom.Free;
+  inherited;
+  // TODO -cMM: THttpRequest.Destroy default body inserted
+end;
+
+function THttpRequest.SaveToString: string;
+var
+  StrList: TstringList;
+begin
+  StrList := TStringList.Create;
+  try
+    SaveToStringList(StrList);
+    Result := StrList.Text;
+  finally
+    StrList.Free;
+  end;
+end;
+
+procedure THttpRequest.SaveToStringList(StrList: TStringList);
+begin
+  if Method <> '' then
+    StrList.Add(Method + ' /' + FReqPage + ' HTTP/1.1')
+  else
+    StrList.Add('GET /' + FReqPage + ' HTTP/1.1');
+
+  if ReqHost <> '' then
+  begin
+    if ReqPort <> '80' then
+      StrList.Add('Host: ' + ReqHost + ':' + ReqPort)
+    else
+      StrList.Add('Host: ' + ReqHost);
+  end
+  else
+    raise Exception.Create('没有地址！');
+
+  if ReqAccept <> '' then
+    StrList.Add('Accept: ' + ReqAccept)
+  else
+  begin
+    if Method = 'GET' then
+      StrList.Add('Accept: ' + DefaultAccept)
+    else
+      StrList.Add('Accept: ' + DefaultPostAccept);
+  end;
+
+  if FReqAcceptEncoding <> '' then
+    StrList.Add('Accept-Encoding: ' + FReqAcceptEncoding)
+  else
+    StrList.Add('Accept-Encoding: ' + DefaultEncoding);
+
+  if Method = 'POST' then
+  begin
+    StrList.Add('Content-Length: ' + IntToStr(FPostDataStream.Size));
+  end;
+
+  if FReqContentType <> '' then
+  begin
+    StrList.Add('Content-Type: ' + FReqContentType);
+  end
+  else
+  begin
+    StrList.Add('Content-Type: application/x-www-form-urlencoded');
+  end;
+//  strList.add('Referer:'+FReqURL);
+
+  if FReqAcceptLanguage <> '' then
+    StrList.Add('Accept-Language: ' + FReqAcceptLanguage)
+  else
+    StrList.Add('Accept-Language: ' + defaultLanguage);
+
+  if FReqConnection <> '' then
+    StrList.Add('Connection: ' + FReqConnection)
+  else
+    StrList.Add('Connection: ' + defaultConnection);
+
+  if FUserAgent <> '' then
+    StrList.Add('User-Agent: ' + FUserAgent)
+  else
+    StrList.Add('User-Agent: ' + defaultUserAgent);
+
+  if FCacheControl <> '' then
+    StrList.Add('Cache-Control: ' + FUserAgent)
+  else
+    StrList.Add('Cache-Control: no-cache');
+  if FCustom.Text<>'' then
+  begin
+    strList.AddStrings(FCustom);
+  end;
+
+  StrList.Add('');
+end;
+
+procedure THttpRequest.SetMethod(const Value: string);
+begin
+  FMethod := UpperCase(Value);
+  if (FMethod = 'POST') and not Assigned(FPostDataStream) then
+    FPostDataStream := TMemoryStream.Create;
+end;
+
+procedure THttpRequest.SetReqURL(const Value: string);
+var
+  TemStr: string;
+  Index: integer;
+begin
+  FReqURL := Value;
+  TemStr := Value;
+  Index := Pos('://', TemStr);
+
+  if Index > 0 then
+  begin
+    Delete(TemStr, 1, Index + 2);
+  end;
+  Index := Pos('/', TemStr);
+  if Index > 0 then
+  begin
+    FReqPage := RightStr(TemStr, Length(TemStr) - Index);
+    Delete(TemStr, index, Length(TemStr) - Index + 1);
+  end;
+  Index := Pos(':', TemStr);
+  if Index > 0 then
+  begin
+    FReqHost := LeftStr(TemStr, index - 1);
+    FReqPort := RightStr(TemStr, Length(TemStr) - index);
+  end
+  else
+  begin
+    FReqHost := TemStr;
+    FReqPort := '80';
+  end;
+end;
+
+constructor THttpResponse.Create;
+begin
+  inherited;
+  FContentStream := TMemoryStream.Create;
+  // TODO -cMM: THttpResponse.Create default body inserted
+end;
+
+destructor THttpResponse.Destroy;
+begin
+  FContentStream.Free;
+  inherited;
+  // TODO -cMM: THttpResponse.Destroy default body inserted
+end;
+
+{ THttpResponse }
+
+procedure THttpResponse.LoadFromString(AStr: string);
+var
+  StrList, TemStrList: TStringList;
+  str: string;
+begin
+  FHeaderstr := AStr;
+
+  StrList := TStringList.Create;
+  try
+//    str := LowerCase(AStr);
+    StrList.Text := StringReplace(str, ':', '=', [rfReplaceAll]);
+    TemStrList := TStringList.Create;
+    try
+      if StrList.Count > 0 then
+      begin
+        TemStrList.Delimiter := ' ';
+        TemStrList.DelimitedText := StrList[0];
+        if TemStrList.Count = 3 then                      //HTTP/1.1 200 OK
+        begin
+          FResultCode := StrToIntDef(TemStrList[1], 0);
+          FResultState := LowerCase(TemStrList[2]);
+        end
+        else if TemStrList.Count > 3 then                      //HTTP/1.1 200 OK
+        begin
+          FResultCode := StrToIntDef(TemStrList[1], 0);
+//          FResultCode := LowerCase(TemStrList[1],0);
+        end;
+      end;
+    finally
+      TemStrList.Free;
+    end;
+
+    FConnection := Trim(StrList.Values['connection']);
+    FContentLength := Trim(StrList.Values['content-length']);
+    FContentType := LowerCase(Trim(StrList.Values['content-type']));
+    FContentEncoding := LowerCase(Trim(StrList.Values['content-encoding']));
+    FTransferEncoding := LowerCase(Trim(StrList.Values['transfer-encoding']));
+    FLocation := Trim(StrList.Values['location']);
+    FServer := Trim(StrList.Values['server']);
+  finally
+    StrList.Free;
+  end;
+end;
+
+constructor THttpCLient.Create;
+begin
+  inherited;
+  FHttpRequest := THttpRequest.Create;
+  FHttpResponse := THttpResponse.Create;
+  FRecvTimeOut := 45000;
+  FConnectTimeOut := 0;
+  // TODO -cMM: THttpCLient.Create default body inserted
+end;
+
+destructor THttpCLient.Destroy;
+begin
+  FHttpRequest.Free;
+  FHttpResponse.Free;
+  inherited;
+  // TODO -cMM: THttpCLient.Destroy default body inserted
+end;
+
+procedure THttpCLient.HttpGet(URL: string; out Stream: Tstream);
+var
+  TcpStream: TGLClientSocketStream;
+begin
+  HttpRequest.ReqURL := URL;
+  TcpStream := TGLClientSocketStream.Create(FRecvTimeOut, FConnectTimeOut);
+  TCPStream.Host := FHttpRequest.ReqHost;
+  TCPStream.Port := StrToIntDef(FHttpRequest.ReqPort, 80);
+  try
+    if TcpStream.Open then
+    begin
+      SendRequest(TcpStream);
+      Read2Response(TcpStream);
+      if  HttpResponse.FResultCode = 302 then        //重定向
+      begin
+        HttpGet(FHttpRequest.ReqHost + HttpResponse.FLocation,Stream);
+        exit;
+      end;
+      HttpResponse.ContentStream.Position := 0;
+      Stream.CopyFrom(HttpResponse.ContentStream, 0);
+    end;
+  finally
+    TcpStream.Free;
+  end;
+end;
+
+function THttpCLient.HttpPost(URL: String; PostData: TStream): string;
+var
+  TcpStream:TGLClientSocketStream;
+begin
+  Result := '';
+  HttpRequest.ReqURL := URL;
+  HttpRequest.Method := 'POST';
+  HttpRequest.PostDataStream.CopyFrom(PostData,0);
+
+  TcpStream := TGLClientSocketStream.Create(FRecvTimeOut,FConnectTimeOut);
+  TCPStream.Host := FHttpRequest.ReqHost;
+  TCPStream.Port := StrToIntDef(FHttpRequest.ReqPort,80);
+  try
+    if TcpStream.Open then
+    begin
+      SendRequest(TcpStream);
+      Read2Response(TcpStream);
+      if  HttpResponse.FResultCode = 302 then        //重定向
+      begin
+        HttpPost(FHttpRequest.ReqHost + HttpResponse.FLocation,PostData);
+        exit;
+      end;
+      HttpResponse.ContentStream.Position := 0;
+      if HttpResponse.ContentStream.Size>0 then
+        Result := HttpResponse.ContentStream.ReadAnsiString(HttpResponse.ContentStream.Size);
+    end;
+  finally
+    TcpStream.Free;
+  end;
+end;
+
+function THttpCLient.HttpPost(URL: string; PostData: TstringList): string;
+var
+  Stream:TStringStream;
+  str : String;
+begin
+  str := Trim(PostData.Text);
+  Str := StringReplace(str,#13#10,'&',[rfReplaceAll]);
+  stream := TStringStream.Create(str);
+  try
+    result := HttpPost(URL,Stream);
+  finally
+    Stream.Free;
+  end;
+end;
+
+function THttpCLient.HTTPGet(URL: string): string;
+var
+  TcpStream: TStringStream;
+begin
+  TcpStream := TStringStream.Create('');
+  try
+    HttpGet(URL, TStream(TCPStream));
+    Result := TcpStream.DataString;
+  finally
+    TcpStream.Free;
+  end;
+end;
+
+{ THttpCLient }
+
+procedure THttpCLient.Read2Response(TCPStream: TGLClientSocketStream);
+const
+  ChunckEnd = #13#10'0'#13#10#13#10;
+var
+  Buf: array[0..65535] of ansiChar;
+  ReadLen: integer;
+  index: integer;
+  P, PHead, Pcontent: PAnsiChar;
+  ContentLength, ReNeedGetLength: integer;
+  HeaderStrStream: TStringStream;
+  temStream,temStream1: TMemoryStream;
+  temStrLen: string;
+  temLen: integer;
+  debugtest, DataLen: integer;
+  EndChar: string;                     //此次接收的最后一个字符
+  FileStream: TFileStream;
+begin
+  TCPStream.UntilOverRead := False;
+  FillChar(Buf, SizeOf(Buf), 0);
+  ReadLen := TCPStream.Read(Buf, SizeOf(Buf));
+  P := @buf;
+
+//  Logger.WriteLog(LTDebug,StrPas(P));
+
+  EndChar := #0#0;
+  index := Pos(sLineBreak + sLineBreak, P);  //判断响应是否完毕
+
+  HeaderStrStream := TStringStream.Create('');
+  try
+    if index > 0 then
+    begin
+      HeaderStrStream.Write(P^, Index - 1);
+      FHttpResponse.LoadFromString(HeaderStrStream.DataString);
+      FHttpResponse.HeaderLen := Index + 3;
+    end
+    else
+    begin
+      debugtest := 0;
+      while index = 0 do
+      begin
+        inc(debugtest);
+//        if debugtest>10 then
+//        begin
+//          Logger.WriteLog(LTDebug,'读取HTTP头时读了10次还没读完，可能死循环了。');
+//          Exit;
+//        end;
+        EndChar := Buf[ReadLen - 2] + Buf[ReadLen - 1];
+        FillChar(Buf, SizeOf(Buf), 0);
+        ReadLen := TCPStream.Read(Buf, SizeOf(Buf));
+        P := @buf;
+
+//        Logger.WriteLog(LTDebug,StrPas(P));
+
+        index := Pos(sLineBreak, P);
+        if (index = 1) and (EndChar = #13#10) then
+        begin
+          FHttpResponse.LoadFromString(HeaderStrStream.DataString);
+        end
+        else if index > 0 then
+        begin
+          HeaderStrStream.Write(P^, Index - 1);
+          FHttpResponse.LoadFromString(HeaderStrStream.DataString);
+        end
+        else
+        begin
+          HeaderStrStream.Write(P^, ReadLen);
+        end;
+      end;
+    end;
+  finally
+    HeaderStrStream.Free;
+  end;
+
+//  if FHttpResponse.ResultState = 'ok' then
+//  begin
+  temStream := TMemoryStream.Create;
+  temStream1 := TMemoryStream.Create;
+  try
+    if FHttpResponse.FContentLength <> '' then
+    begin
+      ReNeedGetLength := StrToIntDef(FHttpResponse.FContentLength, 0);
+      ContentLength := ReNeedGetLength;
+      P := P + index + 3;
+
+//        Logger.WriteLog(LTInfo,'写内容,长度：'+FHttpResponse.FContentLength +' ReNeedGetLength:'+inttostr(ReNeedGetLength - (ReadLen-index-3)));
+
+      if ReNeedGetLength - (ReadLen - index - 3) < 0 then
+      begin
+        temStream.WriteBuffer(P^, ReNeedGetLength);
+        ReNeedGetLength := 0;
+      end
+      else
+      begin
+        temStream.WriteBuffer(P^, ReadLen - index - 3);
+        ReNeedGetLength := ReNeedGetLength - (ReadLen - index - 3);
+      end;
+      debugtest := 0;
+      while ReNeedGetLength > 0 do
+      begin
+//          inc(debugtest);
+//          if debugtest>100 then
+//          begin
+//            Logger.WriteLog(LTDebug,'读取HTTP内容时读了100次还没读完，可能死循环了。ContentLength:'+FHttpResponse.FContentLength);
+//            debugtest := 0;
+//  //          Exit;
+//          end;
+        FillChar(Buf, SizeOf(Buf), 0);
+        ReadLen := TCPStream.Read(Buf, SizeOf(Buf));
+
+//          Logger.WriteLog(LTDebug,StrPas(PChar(@Buf)));
+
+        ReNeedGetLength := ReNeedGetLength - ReadLen;
+        if ReNeedGetLength >= 0 then
+          temStream.WriteBuffer(Buf, ReadLen)
+        else
+          temStream.WriteBuffer(Buf, ReadLen + ReNeedGetLength);
+
+        if Assigned(FOnGetDataCallBack) then
+          FOnGetDataCallBack(ContentLength, ContentLength - ReNeedGetLength, ReadLen);
+      end;
+    end
+    else if FHttpResponse.FTransferEncoding = 'chunked' then         //处理应该还有问题，比如如果接收到一个数据包刚好在Chunked包末尾等情况时
+    begin
+      P := P + index + 3;
+
+      index := Pos(sLineBreak, P);
+      if index = 0 then
+      begin
+        FillChar(Buf, SizeOf(Buf), 0);
+        ReadLen := TCPStream.Read(Buf, SizeOf(Buf));
+        P := @Buf;
+
+//          Logger.WriteLog(LTDebug,StrPas(P));
+
+        index := Pos(sLineBreak, P);
+      end;
+      temStrLen := LeftStr(P, index - 1);
+      P := P + index - 1;
+
+      temLen := StrToInt('$' + temStrLen) {+ FHttpResponse.HeaderLen};
+      debugtest := 0;
+      P := P + 2;
+
+      DataLen := ReadLen -FHttpResponse.HeaderLen - index - 1 ;
+
+      while true do
+      begin
+//          inc(debugtest);
+//          if debugtest>100 then
+//          begin
+//            Logger.WriteLog(LTDebug,'读取HTTP内容时读了100次还没读完，可能死循环了。Chunked读取');
+//            debugtest := 0
+//  //          Exit;
+//          end;
+
+
+        if (temLen = 0) and (DataLen = 0) then
+          Break;
+
+        if temLen > DataLen then
+        begin
+          temStream.WriteBuffer(P^, DataLen);
+          FillChar(Buf, SizeOf(Buf), 0);
+          ReadLen := TCPStream.Read(Buf, SizeOf(Buf));
+          temLen := temLen - DataLen;
+          DataLen := ReadLen;
+          P := @Buf;
+          continue;
+        end
+        else
+        begin                                                             //还没有处理单个包的压缩情况
+          if LeftStr(P+temLen-2,2)=#$D#$A then
+            temStream.WriteBuffer(P^, temLen-2)
+          else
+            temStream.WriteBuffer(P^, temLen);
+
+
+
+          P := P + temlen;
+          DataLen := ReadLen - temLen;
+          if LeftStr(P,2)=#$D#$A then
+          begin
+            Inc(P,2);
+            DataLen := DataLen -2;
+          end;
+        end;
+
+        temStrLen := strpas(P);
+        if temStrLen = '0'#$D#$A#$D#$A then
+          Break
+        else
+        begin
+          if P^ <> #0 then
+          begin
+            index := Pos(sLineBreak, P);
+            temStrLen := LeftStr(P, index - 1);
+            P := P + index - 1;
+            temLen := StrToInt('$' + temStrLen);
+            P := P + 2;
+            DataLen := DataLen - index - 1;
+            Continue;
+          end;
+        end;
+      end;
+//      temStream.Size := temStream.Size - 1;
+    end;
+//        if Pos('gzip',FHttpResponse.FContentEncoding)>0 then
+//      if temStream.Size<>StrToIntDef(FHttpResponse.FContentLength,0) then
+//      begin
+//        Logger.WriteLog(LTInfo,'解压流,流长度：'+inttostr(temStream.Size)+'  '+FHttpRequest.FReqHost+'  FHttpResponse.FContentLength：'+FHttpResponse.FContentLength+FHttpResponse.FTransferEncoding);
+//        try
+//          FileStream := TFileStream.Create('D:\'+formatDatetime('yyyymmddhhnnss',Now)+'.dat',fmCreate);
+//          FileStream.CopyFrom(temStream,0);
+//        finally
+//          FileStream.Free;
+//        end;
+//      end;
+//    temStream.SaveToFile(GetCurrentDir + '\解析后.dat');
+//    temStream1.SaveToFile(GetCurrentDir + '\原始.dat');
+    DecompressGZip(temStream, FHttpResponse.ContentStream);
+//    FHttpResponse.ContentStream.SaveToFile(GetCurrentDir + '\解析后.html');
+//      Logger.WriteLog(LTInfo,'解压流完成：');
+  finally
+    temStream.Free;
+    temStream1.Free;
+  end;
+//  end;
+end;
+
+procedure THttpCLient.SendRequest(TCPStream: TGLClientSocketStream);
+var
+  str: string;
+begin
+  str := FHttpRequest.SaveToString;
+  TCPStream.WriteAnsiString(str, False);
+  if FHttpRequest.Method = 'POST' then
+  begin
+    FHttpRequest.PostDataStream.Position := 0;
+    TCPStream.WriteTStream(FHttpRequest.PostDataStream, False);
+    TCPStream.WriteByte(13);
+    TCPStream.WriteByte(10);
+  end;
+  str := '';
+end;
+
+end.
+
